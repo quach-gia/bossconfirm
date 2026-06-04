@@ -861,6 +861,12 @@ function buildEmployeeCardData(emp, dateStr) {
 }
 
 // ========== RENDER CARDS ==========
+
+function getConfirmedForEmp(empId) {
+    if (!confirmedData || typeof confirmedData !== 'object') return null;
+    return confirmedData[empId] || null;
+}
+
 function renderCards() {
     var container = $id('cardsContainer');
     if (!currentDate) return;
@@ -990,6 +996,12 @@ function renderSingleCard(card) {
                 h += ' <span class="time-label">⏰</span>';
                 h += '<span class="time-value" style="color:var(--danger)">--:-- (thiếu 缺卡)</span>';
             }
+            // Confirmed for this segment
+            var confS = getConfirmedForEmp(card.emp.empId);
+            if (confS && confS['confirmedIn_'+idx]) {
+                h += ' <span class="time-label">✅</span>';
+                h += '<span class="time-value" style="color:#1B5E20;font-weight:700">'+(confS['confirmedIn_'+idx]||'')+' - '+(confS['confirmedOut_'+idx]||'')+'</span>';
+            }
             h += '</div>';
         });
     } else {
@@ -1041,6 +1053,28 @@ function renderSingleCard(card) {
     }
 
     h += '</div>';
+
+    // Confirmed time (if exists)
+    var conf = getConfirmedForEmp(card.emp.empId);
+    if (conf) {
+        var confSegs = conf.segments || [];
+        if (confSegs.length === 0 && conf.confirmedIn) {
+            confSegs = [{confirmedIn: conf.confirmedIn, confirmedOut: conf.confirmedOut}];
+        }
+        confSegs.forEach(function(cs, ci) {
+            var cIn = cs.confirmedIn || cs.start || '--:--';
+            var cOut = cs.confirmedOut || cs.end || '--:--';
+            h += '<div class="time-row" style="background:#E8F5E9;padding:3px 6px;border-radius:4px;margin-top:2px">';
+            h += '<span class="time-label">✅</span>';
+            h += '<span style="font-size:11px;color:#1B5E20;margin-right:4px;font-weight:600">Boss:</span>';
+            if (confSegs.length > 1) h += '<span style="background:#A5D6A7;padding:0 4px;border-radius:3px;font-size:9px;color:#1B5E20;font-weight:700;margin-right:3px">'+(ci+1)+'</span>';
+            h += '<span class="time-value" style="color:#1B5E20;font-weight:700">'+escHtml(cIn)+' - '+escHtml(cOut)+'</span>';
+            h += '</div>';
+        });
+        if (conf.note) {
+            h += '<div class="time-row" style="padding:2px 6px"><span style="font-size:9px;color:#555">📝 '+escHtml(conf.note)+'</span></div>';
+        }
+    }
 
     // Actions
     h += '<div class="card-actions">';
