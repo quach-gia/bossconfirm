@@ -441,7 +441,16 @@ function fetchChamCong(callback) {
     var cbName = '_chamcong_cb_' + (++jsonpCounter);
     var url = 'https://docs.google.com/spreadsheets/d/'+CHAMCONG_SHEET_ID+'/gviz/tq?tqx=out:json;responseHandler='+cbName+'&sheet='+encodeURIComponent(CHAMCONG_SHEET_NAME);
 
+    // Timeout for JSONP - if no response in 15s, call back with empty
+    var _jsonpTimeout = setTimeout(function(){
+        if(window[cbName]){
+            delete window[cbName];
+            console.warn('ChamCong JSONP timeout');
+            callback(null, []);
+        }
+    }, 15000);
     window[cbName] = function(response) {
+        clearTimeout(_jsonpTimeout);
         try {
             var rows = [];
             if (response && response.table && response.table.rows) {
@@ -571,9 +580,18 @@ function loadAllData() {
     var total = 4;
     var errors = [];
 
+    var _loadTimeout = setTimeout(function(){
+        if(loaded < total){
+            console.warn('loadAllData timeout, forcing render with available data');
+            hideLoading();
+            renderCards();
+            toast('Một số dữ liệu chưa tải xong', 'error');
+        }
+    }, 20000);
     function checkDone() {
         loaded++;
         if (loaded >= total) {
+            clearTimeout(_loadTimeout);
             hideLoading();
             renderCards();
             if (errors.length) {
@@ -637,10 +655,11 @@ function loadConfirmedForDate(dateStr, callback) {
         bossPassword: BOSS_PASSWORD,
         date: dateStr
     }).then(function(res) {
-        if (res.success && res.data) {
+        if (res.success && (res.records || res.data)) {
             // Store confirmed data keyed by empId
             confirmedData = {};
-            (Array.isArray(res.data) ? res.data : []).forEach(function(item) {
+            var recs = res.records || res.data || [];
+            (Array.isArray(recs) ? recs : []).forEach(function(item) {
                 confirmedData[item.empId] = item;
             });
         } else {
