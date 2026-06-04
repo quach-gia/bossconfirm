@@ -439,7 +439,7 @@ function apiCall(action, extraParams) {
 
 function fetchChamCong(callback) {
     var cbName = '_chamcong_cb_' + (++jsonpCounter);
-    var url = 'https://docs.google.com/spreadsheets/d/'+CHAMCONG_SHEET_ID+'/gviz/tq?tqx=out:json;responseHandler='+cbName+'&sheet='+encodeURIComponent(CHAMCONG_SHEET_NAME);
+    var url = 'https://docs.google.com/spreadsheets/d/'+CHAMCONG_SHEET_ID+'/gviz/tq?tqx=out:json;responseHandler:'+cbName+'&sheet='+encodeURIComponent(CHAMCONG_SHEET_NAME);
 
     // Timeout for JSONP - if no response in 15s, call back with empty
     var _jsonpTimeout = setTimeout(function(){
