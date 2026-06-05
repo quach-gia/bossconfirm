@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="version" content="2026-06-05.2">
     <title>BossConfirm - Quách Gia 郭家 Xác nhận chấm công</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
@@ -85,6 +89,13 @@ button{font-family:inherit}
 .emp-card.status-missing{border-left-color:var(--danger);background:var(--danger-bg)}
 .emp-card.status-split{border-left-color:var(--info);background:var(--info-bg)}
 .emp-card.status-pending{border-left-color:var(--pending-border);background:var(--pending-bg)}
+.emp-card.status-off{border-left-color:#757575;background:#EEEEEE;opacity:.85}
+.emp-card.status-substitute{border-left-color:#7B1FA2;background:#F3E5F5}
+.emp-card.status-drafted{border-left-color:#FF6F00;border-left-width:6px;background:#FFF3E0;box-shadow:0 0 0 2px #FF6F00}
+.card-status.st-off{background:#757575;color:white}
+.card-status.st-substitute{background:#7B1FA2;color:white}
+.card-status.st-drafted{background:#FF6F00;color:white;animation:pulseDraft 1.5s ease-in-out infinite}
+@keyframes pulseDraft{0%,100%{opacity:1}50%{opacity:.7}}
 
 .card-header{display:flex;align-items:center;padding:10px 12px;gap:10px}
 .card-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:white;flex-shrink:0}
@@ -125,6 +136,31 @@ button{font-family:inherit}
 .btn-xn.edit{background:#fff;color:var(--brand);border:1px solid var(--brand)}
 .btn-xn.edit:hover{background:var(--brand);color:white}
 .btn-xn.edit-link{background:transparent;color:var(--info);border:none;text-decoration:underline;padding:4px 6px;font-size:11px}
+.btn-xn.off{background:#fff;color:#757575;border:1px solid #757575}
+.btn-xn.off:hover{background:#757575;color:white}
+.btn-xn.delete{background:#fff;color:var(--danger);border:1px solid var(--danger);padding:6px 10px}
+.btn-xn.delete:hover{background:var(--danger);color:white}
+
+/* Confirm dialog */
+.confirm-dialog{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:400;display:none;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px)}
+.confirm-dialog.show{display:flex}
+.confirm-box{background:var(--white);border-radius:var(--radius-lg);padding:24px 20px;width:100%;max-width:340px;text-align:center;animation:scaleIn .25s ease}
+.confirm-icon{font-size:48px;color:var(--danger);margin-bottom:12px}
+.confirm-title{font-size:16px;font-weight:800;color:var(--text-dark);margin-bottom:6px}
+.confirm-msg{font-size:13px;color:var(--text-dim);margin-bottom:18px;line-height:1.5}
+.confirm-actions{display:flex;gap:8px}
+.confirm-actions button{flex:1;padding:11px;border:none;border-radius:var(--radius);font-size:14px;font-weight:700;cursor:pointer}
+.btn-confirm-cancel{background:var(--bg);color:var(--text)}
+.btn-confirm-cancel:hover{background:var(--border)}
+.btn-confirm-ok{background:var(--danger);color:white}
+.btn-confirm-ok:hover{background:#b71c1c}
+
+/* Sync status */
+.sync-info{font-size:11px;color:rgba(255,255,255,.85);margin-top:2px;display:flex;align-items:center;gap:4px}
+.sync-info a{color:#fff;text-decoration:underline}
+.btn-add-emp{padding:10px 14px;background:var(--white);color:#7B1FA2;border:2px dashed #7B1FA2;border-radius:var(--radius);font-size:13px;font-weight:700;cursor:pointer;width:100%;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .2s}
+.btn-add-emp:hover{background:#F3E5F5}
+.link-qlnv{display:inline-block;font-size:11px;color:var(--info);text-decoration:underline;margin-top:6px}
 .card-spacer{flex:1}
 
 /* ===== BULK CONFIRM ===== */
@@ -240,10 +276,26 @@ button{font-family:inherit}
 <div id="mainApp" style="display:none">
     <div class="app-header">
         <div class="header-top">
-            <div class="header-title"><i class="fas fa-clipboard-check"></i> BossConfirm</div>
+            <div>
+                <div class="header-title"><i class="fas fa-clipboard-check"></i> BossConfirm</div>
+                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.05.2</span></div>
+            </div>
             <div class="header-actions">
                 <button class="header-btn" id="btnRefresh" title="Làm mới 刷新"><i class="fas fa-sync-alt"></i></button>
                 <button class="header-btn" id="btnLogout" title="Đăng xuất 登出"><i class="fas fa-sign-out-alt"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm dialog (popup xác nhận xóa) -->
+    <div id="confirmDialog" class="confirm-dialog">
+        <div class="confirm-box">
+            <div class="confirm-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="confirm-title" id="confirmTitle">Xác nhận xóa</div>
+            <div class="confirm-msg" id="confirmMsg">Bạn có chắc muốn xóa?</div>
+            <div class="confirm-actions">
+                <button class="btn-confirm-cancel" id="btnConfirmCancel">Hủy 取消</button>
+                <button class="btn-confirm-ok" id="btnConfirmOk"><i class="fas fa-trash"></i> Xóa 刪除</button>
             </div>
         </div>
     </div>
@@ -329,6 +381,9 @@ var currentDept = 'bep';
 var currentDate = '';
 var isLoading = false;
 var jsonpCounter = 0;
+var NOISE_THRESHOLD_MIN = 2; // Punch < 2 phut bi coi la bam nham
+var noiseOverrides = {};     // {empId_segIdx: true=keep, false=ignore} - override quyet dinh tu dong
+var draftConfirmations = {}; // {empId: data} - Boss click XN/Sua nhung chua commit. Bulk = commit all.
 
 // ========== DOM REFS ==========
 var $id = function(id){ return document.getElementById(id); };
@@ -403,6 +458,18 @@ function formatMinDiff(mins) {
     if (mins === null || mins === undefined) return '';
     var sign = mins >= 0 ? '+' : '';
     return sign + mins + 'p';
+}
+
+function normalizeHM(s) {
+    // Normalize any time string to "HH:MM" (pad to 2 digits)
+    if (!s) return '';
+    s = String(s).trim();
+    // Match "H:M", "HH:MM", "HH:MM:SS", "H:MM AM", etc.
+    var m = s.match(/(\d{1,2}):(\d{1,2})/);
+    if (m) return pad(parseInt(m[1],10)) + ':' + pad(parseInt(m[2],10));
+    // Handle pure numeric like "8" → "08:00"
+    if (/^\d{1,2}$/.test(s)) return pad(parseInt(s,10)) + ':00';
+    return s;
 }
 
 function calcHours(start, end) {
@@ -539,16 +606,33 @@ function showMainApp() {
 $id('btnPrevDate').addEventListener('click', function(){ changeDate(-1); });
 $id('btnNextDate').addEventListener('click', function(){ changeDate(1); });
 $id('dateInput').addEventListener('change', function(){
-    currentDate = this.value;
+    var newDate = this.value;
+    if (!confirmLeavePage()) {
+        this.value = currentDate; // Revert
+        return;
+    }
+    currentDate = newDate;
     onDateChanged();
 });
 
 function changeDate(delta) {
+    if (!confirmLeavePage()) return;
     var d = new Date(currentDate);
     d.setDate(d.getDate() + delta);
     currentDate = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
     $id('dateInput').value = currentDate;
     onDateChanged();
+}
+
+// Canh bao neu boss co draft chua commit, hoi truoc khi mat
+function confirmLeavePage() {
+    var draftCount = Object.keys(draftConfirmations).length;
+    if (draftCount === 0) return true;
+    if (confirm('⚠ Có '+draftCount+' NV đã chọn nhưng chưa bấm "Đồng ý xác nhận".\nTiếp tục sẽ MẤT các lựa chọn này. Bỏ chọn?')) {
+        draftConfirmations = {};
+        return true;
+    }
+    return false;
 }
 
 function onDateChanged() {
@@ -651,19 +735,89 @@ function loadAllData() {
 }
 
 function loadConfirmedForDate(dateStr, callback) {
+    // Backend append-only: moi lan XN tao record moi. Can dedup: chi giu LATEST batch per (empId+date).
+    // Backend date filter bi loi -> load tat ca + filter client-side.
     apiCall('getConfirmedAttendance', {
-        bossPassword: BOSS_PASSWORD,
-        date: dateStr
+        bossPassword: BOSS_PASSWORD
     }).then(function(res) {
+        confirmedData = {};
         if (res.success && (res.records || res.data)) {
-            // Store confirmed data keyed by empId
-            confirmedData = {};
             var recs = res.records || res.data || [];
-            (Array.isArray(recs) ? recs : []).forEach(function(item) {
-                confirmedData[item.empId] = item;
+            // 1) Filter records cua dateStr
+            recs = (Array.isArray(recs) ? recs : []).filter(function(item){
+                return parseYMDFromDate(item.date) === dateStr;
             });
-        } else {
-            confirmedData = {};
+            // 2) Sort by confirmedAt desc - record moi nhat dau tien
+            recs.sort(function(a,b){
+                var ta = new Date(a.confirmedAt || 0).getTime();
+                var tb = new Date(b.confirmedAt || 0).getTime();
+                return tb - ta;
+            });
+            // 3) Per empId, chi giu LATEST BATCH. Skip legacy/deleted/cancelled.
+            var grouped = {};
+            var latestTs = {};
+            var latestStatus = {};
+            recs.forEach(function(item){
+                var k = item.empId;
+                var ts = new Date(item.confirmedAt || 0).getTime();
+
+                // Decode status tu note prefix [STATUS:xxx] vi backend bo qua field status
+                var rawNote = String(item.note || '');
+                var noteStatus = null;
+                var cleanNote = rawNote;
+                var sm = rawNote.match(/^\[STATUS:(\w+)\]/);
+                if (sm) {
+                    noteStatus = sm[1];
+                    cleanNote = rawNote.substring(sm[0].length);
+                }
+                var effectiveStatus = noteStatus || item.status || 'confirmed';
+
+                var ci = parseTimeFromDate(item.confirmedIn);
+                var co = parseTimeFromDate(item.confirmedOut);
+
+                // BO QUA LEGACY EMPTY RECORDS: tu BossConfirm cu (chua co flatten fix).
+                // Dac diem: gio rong + khong co STATUS prefix + khong phai OFF.
+                // Treat as garbage -> NV hien lai trang thai pending de boss XN lai.
+                if (!noteStatus && !ci && !co) return;
+
+                if (latestTs[k] === undefined) {
+                    latestTs[k] = ts;
+                    latestStatus[k] = effectiveStatus;
+                }
+                if (latestStatus[k] === 'deleted' || latestStatus[k] === 'cancelled') return;
+                // Bo qua record cu hon batch latest (cach >10s)
+                if (latestTs[k] - ts > 10000) return;
+
+                if (!grouped[k]) {
+                    grouped[k] = {
+                        empId: item.empId,
+                        empName: item.empName || '',
+                        empNameCN: item.empNameCN || '',
+                        date: dateStr,
+                        segments: [],
+                        status: effectiveStatus,
+                        isSubstitute: !!item.isSubstitute,
+                        note: cleanNote,
+                        confirmedBy: item.confirmedBy || 'boss',
+                        confirmedAt: item.confirmedAt || ''
+                    };
+                }
+                var seg = {
+                    confirmedStart: ci,
+                    confirmedEnd: co,
+                    originalStart: parseTimeFromDate(item.originalIn),
+                    originalEnd: parseTimeFromDate(item.originalOut),
+                    schedStart: parseTimeFromDate(item.schedStart),
+                    schedEnd: parseTimeFromDate(item.schedEnd)
+                };
+                var sIdx = typeof item.shiftIndex === 'number' ? item.shiftIndex : grouped[k].segments.length;
+                grouped[k].segments[sIdx] = seg;
+            });
+            // 4) Loai bo undefined slot trong segments[]
+            Object.keys(grouped).forEach(function(k){
+                grouped[k].segments = grouped[k].segments.filter(function(s){ return !!s; });
+                confirmedData[k] = grouped[k];
+            });
         }
         if (callback) callback(null);
     }).catch(function(e) {
@@ -801,6 +955,24 @@ function matchPunchToSchedule(punchPairs, schedSegments) {
     return matched;
 }
 
+// Phat hien punch nham: thoi gian punch ngan (<2p) va KHONG khop lich
+function detectNoiseSegment(seg) {
+    if (!seg.punchStart || !seg.punchEnd) return false;
+    var dur = timeDiffMinutes(seg.punchStart, seg.punchEnd);
+    if (dur === null || dur < 0) return false;
+    // Co lich + thoi gian ngan -> co the la nham (vd: ca 4 tieng ma chi cham 30 giay)
+    // Khong lich + thoi gian ngan -> chac chan la nham
+    if (dur < NOISE_THRESHOLD_MIN) return true;
+    return false;
+}
+
+// Lay trang thai ignored thuc te (uu tien override cua boss, mac dinh = auto-detect)
+function isSegIgnored(empId, segIdx, seg) {
+    var key = empId + '_' + segIdx;
+    if (noiseOverrides[key] != null) return noiseOverrides[key];
+    return !!seg.isNoise;
+}
+
 function buildEmployeeCardData(emp, dateStr) {
     var sched = getScheduleForEmp(emp.empId, dateStr);
     var ccRecords = getChamCongForEmp(emp.empId, dateStr);
@@ -815,10 +987,23 @@ function buildEmployeeCardData(emp, dateStr) {
     var isSplit = schedSegments.length > 1 || punchPairs.length > 1;
     var matchedSegments = matchPunchToSchedule(punchPairs, schedSegments);
 
-    // Determine status
+    // Danh dau cac segment co the la punch nham
+    matchedSegments.forEach(function(seg) {
+        // Chi flag nhung segment KHONG co lich (orphan punch) va thoi gian ngan
+        if (!seg.schedStart && detectNoiseSegment(seg)) {
+            seg.isNoise = true;
+        }
+    });
+
+    // Determine status. DRAFT priority cao hon confirmed (vi boss vua edit moi)
     var status = 'pending'; // default
-    if (confirmed) {
-        status = 'confirmed';
+    var draft = draftConfirmations[emp.empId] || null;
+    if (draft) {
+        status = 'drafted';
+    } else if (confirmed) {
+        if (confirmed.status === 'off') status = 'off';
+        else if (confirmed.status === 'substitute' || confirmed.isSubstitute) status = 'substitute';
+        else status = 'confirmed';
     } else {
         // Check if any segment has missing punch
         var hasMissing = false;
@@ -855,6 +1040,7 @@ function buildEmployeeCardData(emp, dateStr) {
         punchPairs: punchPairs,
         matchedSegments: matchedSegments,
         confirmed: confirmed,
+        draft: draft,
         isSplit: isSplit,
         status: status
     };
@@ -877,21 +1063,23 @@ function renderCards() {
         if (getDeptFromEmp(emp) !== currentDept) return;
         var sched = getScheduleForEmp(emp.empId, currentDate);
         var ccRecords = getChamCongForEmp(emp.empId, currentDate);
-        // Only show employees with schedule or punch data for this day
-        if (!sched && ccRecords.length === 0) return;
+        // Hiện NV có lịch, có chấm công, hoặc đã được boss xác nhận/thêm thay ca/OFF
+        var hasConfirmed = !!confirmedData[emp.empId];
+        if (!sched && ccRecords.length === 0 && !hasConfirmed) return;
         cards.push(buildEmployeeCardData(emp, currentDate));
     });
 
-    // Sort: pending/warning/missing first, confirmed last
-    var statusOrder = {missing:0, warning:1, split:2, pending:3, confirmed:4};
+    // Sort: drafted/pending dau, confirmed cuoi
+    var statusOrder = {drafted:0, missing:1, warning:2, split:3, pending:4, substitute:5, confirmed:6, off:7};
     cards.sort(function(a, b) {
         return (statusOrder[a.status]||3) - (statusOrder[b.status]||3);
     });
 
     // Update stats
-    var countConfirmed = 0, countPending = 0, countMissing = 0;
+    var countConfirmed = 0, countPending = 0, countMissing = 0, countDrafted = 0;
     cards.forEach(function(c) {
-        if (c.status === 'confirmed') countConfirmed++;
+        if (c.status === 'drafted') countDrafted++;
+        else if (c.status === 'confirmed' || c.status === 'off' || c.status === 'substitute') countConfirmed++;
         else if (c.status === 'missing') countMissing++;
         else countPending++;
     });
@@ -899,11 +1087,10 @@ function renderCards() {
     $id('statPending').textContent = countPending;
     $id('statMissing').textContent = countMissing;
 
-    // Show/hide bulk bar
-    var pendingCount = cards.length - countConfirmed;
-    if (pendingCount > 0) {
+    // Bulk bar: chi hien khi co NV trong draft (Boss da click XN/Sua)
+    if (countDrafted > 0) {
         $id('bulkBar').style.display = 'block';
-        $id('bulkBadge').textContent = pendingCount;
+        $id('bulkBadge').textContent = countDrafted;
     } else {
         $id('bulkBar').style.display = 'none';
     }
@@ -917,10 +1104,18 @@ function renderCards() {
     cards.forEach(function(card) {
         html += renderSingleCard(card);
     });
+
+    // Nút thêm NV thay ca
+    html += '<button class="btn-add-emp" id="btnAddSub"><i class="fas fa-user-plus"></i> Thêm nhân viên thay ca 添加代班員工</button>';
+
     container.innerHTML = html;
 
     // Bind card action buttons
     bindCardActions();
+
+    // Bind add substitute button
+    var btnAdd = $id('btnAddSub');
+    if (btnAdd) btnAdd.addEventListener('click', openAddSubModal);
 }
 
 function renderSingleCard(card) {
@@ -952,6 +1147,15 @@ function renderSingleCard(card) {
         case 'split':
             statusBadge = '<span class="card-status st-split"><i class="fas fa-clock"></i> Ca gãy 分班</span>';
             break;
+        case 'off':
+            statusBadge = '<span class="card-status st-off"><i class="fas fa-user-slash"></i> OFF 休假</span>';
+            break;
+        case 'substitute':
+            statusBadge = '<span class="card-status st-substitute"><i class="fas fa-user-plus"></i> Thay ca 代班</span>';
+            break;
+        case 'drafted':
+            statusBadge = '<span class="card-status st-drafted"><i class="fas fa-clock"></i> Đã chọn 已選</span>';
+            break;
         default:
             statusBadge = '<span class="card-status st-pending"><i class="fas fa-hourglass-half"></i> Chờ 待確認</span>';
     }
@@ -971,59 +1175,140 @@ function renderSingleCard(card) {
     // Body: time info
     h += '<div class="card-body">';
 
-    if (card.isSplit && card.matchedSegments.length > 1) {
-        // Split shift: show segments
-        card.matchedSegments.forEach(function(seg, idx) {
-            h += '<div class="split-segment">';
-            h += '<span class="split-badge">'+(idx+1)+'</span>';
-            // Scheduled
-            if (seg.schedStart) {
-                h += '<span class="time-label">📅</span>';
-                h += '<span class="time-value scheduled">'+escHtml(seg.schedStart)+' - '+escHtml(seg.schedEnd)+'</span>';
-            }
-            // Actual
-            if (seg.punchStart || seg.punchEnd) {
-                h += ' <span class="time-label">⏰</span>';
-                h += '<span class="time-value actual">'+(seg.punchStart||'--:--')+' - '+(seg.punchEnd||'--:--')+'</span>';
-                // Diff
-                if (seg.schedStart && seg.punchStart) {
-                    var diff = timeDiffMinutes(seg.schedStart, seg.punchStart);
-                    if (diff !== null && diff !== 0) {
-                        h += '<span class="time-diff '+(diff>0?'late':'early')+'">'+formatMinDiff(diff)+'</span>';
-                    }
-                }
-            } else if (seg.schedStart) {
-                h += ' <span class="time-label">⏰</span>';
-                h += '<span class="time-value" style="color:var(--danger)">--:-- (thiếu 缺卡)</span>';
-            }
-            // Confirmed for this segment
-            var confS = getConfirmedForEmp(card.emp.empId);
-            if (confS && confS['confirmedIn_'+idx]) {
-                h += ' <span class="time-label">✅</span>';
-                h += '<span class="time-value" style="color:#1B5E20;font-weight:700">'+(confS['confirmedIn_'+idx]||'')+' - '+(confS['confirmedOut_'+idx]||'')+'</span>';
-            }
-            h += '</div>';
-        });
-    } else {
-        // Single shift
-        var seg = card.matchedSegments[0] || {schedStart:'', schedEnd:'', punchStart:'', punchEnd:''};
-
-        // Scheduled
-        if (seg.schedStart) {
+    // OFF status: render đơn giản
+    if (card.status === 'off') {
+        var sched0 = card.schedSegments[0] || {};
+        if (sched0.start) {
             h += '<div class="time-row">';
             h += '<span class="time-label">📅</span>';
             h += '<span style="font-size:11px;color:var(--text-dim);margin-right:4px">Lịch:</span>';
-            h += '<span class="time-value scheduled">'+escHtml(seg.schedStart)+' - '+escHtml(seg.schedEnd)+'</span>';
+            h += '<span class="time-value" style="text-decoration:line-through;color:var(--text-dim)">'+escHtml(sched0.start)+' - '+escHtml(sched0.end||'')+'</span>';
             h += '</div>';
         }
+        h += '<div class="time-row" style="background:rgba(117,117,117,.1);padding:6px 8px;border-radius:4px;margin-top:4px">';
+        h += '<span class="time-label">🚫</span>';
+        h += '<span style="font-size:12px;color:#424242;font-weight:700">Nghỉ đột xuất 休假</span>';
+        h += '</div>';
+        if (card.confirmed && card.confirmed.note) {
+            h += '<div class="time-row" style="padding:0 6px"><span style="font-size:10px;color:#555">📝 '+escHtml(card.confirmed.note)+'</span></div>';
+        }
+        h += '</div>'; // close body
+        // Actions for OFF
+        h += '<div class="card-actions">';
+        h += '<span style="font-size:11px;color:#757575;font-weight:600"><i class="fas fa-user-slash"></i> Nghỉ 休假</span>';
+        h += '<span class="card-spacer"></span>';
+        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa OFF"><i class="fas fa-trash"></i></button>';
+        h += '<button class="btn-xn edit-link" data-action="unoff" data-empid="'+emp.empId+'"><i class="fas fa-undo"></i> Hủy OFF 取消</button>';
+        h += '</div>';
+        h += '</div>'; // close emp-card
+        return h;
+    }
 
-        // Actual punch
+    if (card.isSplit && card.matchedSegments.length > 1) {
+        // Split shift: mỗi Ca hiện 3 dòng riêng biệt Lịch+Thực+Boss
+        card.matchedSegments.forEach(function(seg, idx) {
+            var ignored = isSegIgnored(card.emp.empId, idx, seg);
+            var segStyle = ignored ? 'opacity:.5;background:rgba(158,158,158,.15)' : '';
+            h += '<div class="split-segment" style="'+segStyle+'">';
+            // Header Ca N
+            h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12px;font-weight:700;color:var(--info);flex-wrap:wrap">';
+            h += '<span class="split-badge">'+(idx+1)+'</span> Ca '+(idx+1)+' 班次'+(idx+1);
+            if (seg.isNoise) {
+                h += '<span style="background:#FFCDD2;color:#B71C1C;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700"><i class="fas fa-exclamation-triangle"></i> Có thể bấm nhầm 誤觸</span>';
+            }
+            // Toggle button
+            if (seg.isNoise || (!seg.schedStart && seg.punchStart)) {
+                if (ignored) {
+                    h += '<button class="seg-toggle" data-empid="'+card.emp.empId+'" data-idx="'+idx+'" data-action="restore" style="margin-left:auto;background:transparent;border:1px solid var(--info);color:var(--info);padding:2px 8px;border-radius:10px;font-size:10px;cursor:pointer;font-weight:600"><i class="fas fa-undo"></i> Khôi phục</button>';
+                } else {
+                    h += '<button class="seg-toggle" data-empid="'+card.emp.empId+'" data-idx="'+idx+'" data-action="ignore" style="margin-left:auto;background:transparent;border:1px solid var(--danger);color:var(--danger);padding:2px 8px;border-radius:10px;font-size:10px;cursor:pointer;font-weight:600"><i class="fas fa-times"></i> Bỏ ca</button>';
+                }
+            }
+            h += '</div>';
+
+            // 1) Lịch row
+            h += '<div class="time-row">';
+            h += '<span class="time-label">📅</span>';
+            h += '<span style="font-size:11px;color:var(--text-dim);margin-right:4px">Lịch:</span>';
+            if (seg.schedStart || seg.schedEnd) {
+                h += '<span class="time-value scheduled">'+escHtml(seg.schedStart||'--:--')+' - '+escHtml(seg.schedEnd||'--:--')+'</span>';
+            } else {
+                h += '<span class="time-value" style="color:var(--text-dim)">--:-- (không có lịch)</span>';
+            }
+            h += '</div>';
+
+            // 2) Thực row
+            h += '<div class="time-row">';
+            h += '<span class="time-label">⏰</span>';
+            h += '<span style="font-size:11px;color:var(--text-dim);margin-right:4px">Thực:</span>';
+            if (seg.punchStart || seg.punchEnd) {
+                h += '<span class="time-value actual">'+(seg.punchStart||'--:--')+' - '+(seg.punchEnd||'--:--')+'</span>';
+                if (seg.schedStart && seg.punchStart) {
+                    var dS = timeDiffMinutes(seg.schedStart, seg.punchStart);
+                    if (dS !== null && dS !== 0) h += '<span class="time-diff '+(dS>0?'late':'early')+'">'+formatMinDiff(dS)+'</span>';
+                }
+                if (seg.schedEnd && seg.punchEnd) {
+                    var dE = timeDiffMinutes(seg.schedEnd, seg.punchEnd);
+                    if (dE !== null && dE !== 0) h += '<span class="time-diff '+(dE>0?'late':'early')+'">'+formatMinDiff(dE)+'</span>';
+                }
+            } else {
+                h += '<span class="time-value" style="color:var(--danger)">--:-- (thiếu 缺卡)</span>';
+            }
+            h += '</div>';
+
+            // 3) Boss row (uu tien draft)
+            var confS = card.draft || card.confirmed;
+            var isDraftSplit = !!card.draft;
+            if (confS) {
+                var confSegArr = confS.segments || [];
+                var confSeg = confSegArr[idx] || null;
+                var bossIn = '', bossOut = '';
+                if (confSeg) {
+                    bossIn = normalizeHM(confSeg.confirmedStart || confSeg.confirmedIn || confSeg.start || '');
+                    bossOut = normalizeHM(confSeg.confirmedEnd || confSeg.confirmedOut || confSeg.end || '');
+                } else if (idx === 0 && (confS.confirmedIn || confS.confirmedStart)) {
+                    bossIn = normalizeHM(confS.confirmedIn || confS.confirmedStart || '');
+                    bossOut = normalizeHM(confS.confirmedOut || confS.confirmedEnd || '');
+                }
+                if (bossIn || bossOut) {
+                    var rowBorder = isDraftSplit ? '1px dashed #FF6F00' : '1px solid #A5D6A7';
+                    var rowClr = isDraftSplit ? '#E65100' : '#1B5E20';
+                    var rowIcon = isDraftSplit ? '⏳' : '✅';
+                    var rowLbl = isDraftSplit ? 'Boss (chờ):' : 'Boss:';
+                    h += '<div class="time-row" style="background:rgba(255,255,255,.7);padding:3px 6px;border-radius:4px;border:'+rowBorder+'">';
+                    h += '<span class="time-label">'+rowIcon+'</span>';
+                    h += '<span style="font-size:11px;color:'+rowClr+';margin-right:4px;font-weight:700">'+rowLbl+'</span>';
+                    h += '<span class="time-value" style="color:'+rowClr+';font-weight:700">'+escHtml(bossIn||'--:--')+' - '+escHtml(bossOut||'--:--')+'</span>';
+                    h += '</div>';
+                }
+            }
+            h += '</div>';
+        });
+        // Note for split shift confirmed
+        if (card.confirmed && card.confirmed.note) {
+            h += '<div class="time-row" style="padding:0 6px"><span style="font-size:10px;color:#555">📝 '+escHtml(card.confirmed.note)+'</span></div>';
+        }
+    } else {
+        // Single shift — luôn render đủ 3 dòng: Lịch + Thực + Boss
+        var seg = card.matchedSegments[0] || {schedStart:'', schedEnd:'', punchStart:'', punchEnd:''};
+
+        // 1) Lịch (Scheduled) — luôn hiện
+        h += '<div class="time-row">';
+        h += '<span class="time-label">📅</span>';
+        h += '<span style="font-size:11px;color:var(--text-dim);margin-right:4px">Lịch:</span>';
+        if (seg.schedStart || seg.schedEnd) {
+            h += '<span class="time-value scheduled">'+escHtml(seg.schedStart||'--:--')+' - '+escHtml(seg.schedEnd||'--:--')+'</span>';
+        } else {
+            h += '<span class="time-value" style="color:var(--text-dim)">--:-- (không có lịch)</span>';
+        }
+        h += '</div>';
+
+        // 2) Thực (Actual punch) — luôn hiện
         h += '<div class="time-row">';
         h += '<span class="time-label">⏰</span>';
         h += '<span style="font-size:11px;color:var(--text-dim);margin-right:4px">Thực:</span>';
         if (seg.punchStart || seg.punchEnd) {
             h += '<span class="time-value actual">'+(seg.punchStart||'--:--')+' - '+(seg.punchEnd||'--:--')+'</span>';
-            // Diff
             if (seg.schedStart && seg.punchStart) {
                 var diff = timeDiffMinutes(seg.schedStart, seg.punchStart);
                 if (diff !== null && diff !== 0) {
@@ -1041,52 +1326,57 @@ function renderSingleCard(card) {
         }
         h += '</div>';
 
-        // Confirmed times (if confirmed)
-        if (card.confirmed && card.confirmed.segments) {
-            h += '<div class="time-row">';
-            h += '<span class="time-label">✓</span>';
-            h += '<span style="font-size:11px;color:var(--success);margin-right:4px">XN:</span>';
-            var cs = card.confirmed.segments[0] || {};
-            h += '<span class="time-value" style="color:var(--success)">'+(cs.confirmedStart||'--:--')+' - '+(cs.confirmedEnd||'--:--')+'</span>';
+        // 3) Boss (Confirmed hoac Draft) — uu tien draft neu co
+        var bossSource = card.draft || card.confirmed;
+        if (bossSource) {
+            var isDraft = !!card.draft;
+            var confSegsSingle = bossSource.segments || [];
+            if (confSegsSingle.length === 0 && (bossSource.confirmedIn || bossSource.confirmedStart)) {
+                confSegsSingle = [{
+                    confirmedStart: bossSource.confirmedIn || bossSource.confirmedStart,
+                    confirmedEnd: bossSource.confirmedOut || bossSource.confirmedEnd
+                }];
+            }
+            var csSingle = confSegsSingle[0] || {};
+            var bIn = normalizeHM(csSingle.confirmedStart || csSingle.confirmedIn || csSingle.start || '');
+            var bOut = normalizeHM(csSingle.confirmedEnd || csSingle.confirmedOut || csSingle.end || '');
+            var rowStyle = isDraft
+                ? 'background:rgba(255,255,255,.7);padding:3px 6px;border-radius:4px;border:1px dashed #FF6F00'
+                : 'background:rgba(255,255,255,.7);padding:3px 6px;border-radius:4px;border:1px solid #A5D6A7';
+            var lblColor = isDraft ? '#E65100' : '#1B5E20';
+            var lblText = isDraft ? 'Boss (chờ):' : 'Boss:';
+            h += '<div class="time-row" style="'+rowStyle+'">';
+            h += '<span class="time-label">'+(isDraft?'⏳':'✅')+'</span>';
+            h += '<span style="font-size:11px;color:'+lblColor+';margin-right:4px;font-weight:700">'+lblText+'</span>';
+            h += '<span class="time-value" style="color:'+lblColor+';font-weight:700">'+escHtml(bIn||'--:--')+' - '+escHtml(bOut||'--:--')+'</span>';
             h += '</div>';
+            if (bossSource.note) {
+                h += '<div class="time-row" style="padding:0 6px"><span style="font-size:10px;color:#555">📝 '+escHtml(bossSource.note)+'</span></div>';
+            }
         }
     }
 
     h += '</div>';
 
-    // Confirmed time (if exists)
-    var conf = getConfirmedForEmp(card.emp.empId);
-    if (conf) {
-        var confSegs = conf.segments || [];
-        if (confSegs.length === 0 && conf.confirmedIn) {
-            confSegs = [{confirmedIn: conf.confirmedIn, confirmedOut: conf.confirmedOut}];
-        }
-        confSegs.forEach(function(cs, ci) {
-            var cIn = cs.confirmedIn || cs.start || '--:--';
-            var cOut = cs.confirmedOut || cs.end || '--:--';
-            h += '<div class="time-row" style="background:#E8F5E9;padding:3px 6px;border-radius:4px;margin-top:2px">';
-            h += '<span class="time-label">✅</span>';
-            h += '<span style="font-size:11px;color:#1B5E20;margin-right:4px;font-weight:600">Boss:</span>';
-            if (confSegs.length > 1) h += '<span style="background:#A5D6A7;padding:0 4px;border-radius:3px;font-size:9px;color:#1B5E20;font-weight:700;margin-right:3px">'+(ci+1)+'</span>';
-            h += '<span class="time-value" style="color:#1B5E20;font-weight:700">'+escHtml(cIn)+' - '+escHtml(cOut)+'</span>';
-            h += '</div>';
-        });
-        if (conf.note) {
-            h += '<div class="time-row" style="padding:2px 6px"><span style="font-size:9px;color:#555">📝 '+escHtml(conf.note)+'</span></div>';
-        }
-    }
-
     // Actions
     h += '<div class="card-actions">';
-    if (card.status === 'confirmed') {
+    if (card.status === 'drafted') {
+        h += '<span style="font-size:11px;color:#FF6F00;font-weight:700"><i class="fas fa-clock"></i> Chờ bấm "Đồng ý xác nhận"</span>';
+        h += '<span class="card-spacer"></span>';
+        h += '<button class="btn-xn off" data-action="quick-confirm" data-empid="'+emp.empId+'" title="Bỏ chọn"><i class="fas fa-times"></i> Bỏ chọn</button>';
+        h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
+    } else if (card.status === 'confirmed' || card.status === 'substitute') {
         h += '<span style="font-size:11px;color:var(--success);font-weight:600"><i class="fas fa-check-circle"></i> Đã xác nhận 已確認</span>';
         h += '<span class="card-spacer"></span>';
+        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa xác nhận"><i class="fas fa-trash"></i></button>';
         h += '<button class="btn-xn edit-link" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Chỉnh sửa 修改</button>';
     } else if (card.status === 'missing') {
+        h += '<button class="btn-xn off" data-action="off" data-empid="'+emp.empId+'"><i class="fas fa-user-slash"></i> OFF</button>';
         h += '<span class="card-spacer"></span>';
         h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
     } else {
-        h += '<button class="btn-xn confirm" data-action="quick-confirm" data-empid="'+emp.empId+'"><i class="fas fa-check"></i> XN 確認</button>';
+        h += '<button class="btn-xn confirm" data-action="quick-confirm" data-empid="'+emp.empId+'"><i class="fas fa-check"></i> Chọn XN</button>';
+        h += '<button class="btn-xn off" data-action="off" data-empid="'+emp.empId+'"><i class="fas fa-user-slash"></i> OFF</button>';
         h += '<span class="card-spacer"></span>';
         h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
     }
@@ -1111,19 +1401,286 @@ function bindCardActions() {
                 doQuickConfirm(empId);
             } else if (action === 'edit') {
                 openEditModal(empId);
+            } else if (action === 'off') {
+                doOffConfirm(empId);
+            } else if (action === 'unoff') {
+                doUnoff(empId);
+            } else if (action === 'delete') {
+                askDeleteConfirmation(empId);
             }
+        });
+    });
+    // Toggle bỏ/khôi phục segment (punch nhầm)
+    document.querySelectorAll('.seg-toggle').forEach(function(btn){
+        btn.addEventListener('click', function(e){
+            e.stopPropagation();
+            var empId = this.dataset.empid;
+            var idx = parseInt(this.dataset.idx, 10);
+            var key = empId + '_' + idx;
+            var action = this.dataset.action;
+            noiseOverrides[key] = (action === 'restore'); // restore=true=keep, ignore=false
+            renderCards();
         });
     });
 }
 
-// ========== QUICK CONFIRM ==========
+// ========== CONFIRM DIALOG (popup xác nhận xóa) ==========
+function showConfirmDialog(title, msg, onOk) {
+    $id('confirmTitle').textContent = title;
+    $id('confirmMsg').innerHTML = msg;
+    $id('confirmDialog').classList.add('show');
+
+    var ok = $id('btnConfirmOk');
+    var cancel = $id('btnConfirmCancel');
+    var cleanup = function() {
+        $id('confirmDialog').classList.remove('show');
+        ok.onclick = null;
+        cancel.onclick = null;
+    };
+    ok.onclick = function(){ cleanup(); onOk(); };
+    cancel.onclick = cleanup;
+}
+
+function askDeleteConfirmation(empId) {
+    var emp = findEmp(empId);
+    if (!emp) return;
+    var name = (emp.name||'') + (emp.nameCN ? ' '+emp.nameCN : '');
+    showConfirmDialog(
+        'Xóa xác nhận?',
+        'Bạn chắc chắn muốn <b>xóa xác nhận</b> của:<br><b style="color:var(--brand)">'+escHtml(name)+'</b> ('+escHtml(empId)+')?<br><br><span style="color:var(--danger);font-size:11px">⚠ Hành động này không hoàn tác được</span>',
+        function(){ doDeleteConfirmation(empId); }
+    );
+}
+
+function doDeleteConfirmation(empId) {
+    var emp = findEmp(empId);
+    if (!emp) return;
+    showLoading('Đang xóa 正在刪除...');
+
+    var data = {
+        empId: empId,
+        empName: emp.name,
+        empNameCN: emp.nameCN || '',
+        date: currentDate,
+        segments: [],
+        status: 'deleted',
+        note: 'Đã xóa xác nhận',
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: 'boss'
+    };
+
+    apiCall('confirmAttendance', {
+        bossPassword: BOSS_PASSWORD,
+        data: JSON.stringify(flattenForBackend(data))
+    }).then(function(res) {
+        hideLoading();
+        delete confirmedData[empId];
+        renderCards();
+        updateSyncStatus(true);
+        toast('Đã xóa xác nhận '+emp.name, 'success');
+    }).catch(function(e) {
+        hideLoading();
+        delete confirmedData[empId];
+        renderCards();
+        updateSyncStatus(false);
+        toast('Đã xóa local, đồng bộ sau', 'info');
+    });
+}
+
+// ========== OFF (nghỉ đột xuất) ==========
+function doOffConfirm(empId) {
+    var emp = findEmp(empId);
+    if (!emp) return;
+    var reason = prompt('Lý do nghỉ 休假原因 (tùy chọn):', '');
+    if (reason === null) return; // user cancelled
+    var data = {
+        empId: empId,
+        empName: emp.name,
+        empNameCN: emp.nameCN || '',
+        date: currentDate,
+        segments: [],
+        status: 'off',
+        note: reason || 'OFF - Nghỉ đột xuất',
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: 'boss'
+    };
+    saveConfirmation(data);
+}
+
+function doUnoff(empId) {
+    if (!confirm('Hủy trạng thái OFF của nhân viên này?\n取消休假狀態？')) return;
+    // Reset bằng cách xác nhận lại với status rỗng và segments rỗng
+    var emp = findEmp(empId);
+    if (!emp) return;
+    var data = {
+        empId: empId,
+        empName: emp.name,
+        empNameCN: emp.nameCN || '',
+        date: currentDate,
+        segments: [],
+        status: 'cancelled',
+        note: 'Hủy OFF',
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: 'boss'
+    };
+    // Xoá local trước, gửi backend để cập nhật
+    delete confirmedData[empId];
+    renderCards();
+    apiCall('confirmAttendance', {
+        bossPassword: BOSS_PASSWORD,
+        data: JSON.stringify(flattenForBackend(data))
+    }).catch(function(){});
+}
+
+// ========== ADD SUBSTITUTE EMPLOYEE ==========
+function openAddSubModal() {
+    // Lấy danh sách NV của bộ phận hiện tại chưa có trong cards hôm nay
+    var shownIds = {};
+    document.querySelectorAll('.emp-card[data-empid]').forEach(function(c){ shownIds[c.dataset.empid] = true; });
+
+    var available = allEmployees.filter(function(e) {
+        if (getDeptFromEmp(e) !== currentDept) return false;
+        if (shownIds[e.empId]) return false;
+        return true;
+    });
+
+    var html = '';
+    html += '<div class="modal-header">';
+    html += '<div>';
+    html += '<div class="modal-title"><i class="fas fa-user-plus"></i> Thêm NV thay ca</div>';
+    html += '<div class="modal-subtitle">添加代班員工 - '+formatDateVN(currentDate)+'</div>';
+    html += '</div>';
+    html += '<button class="modal-close" id="btnCloseAddSub">&times;</button>';
+    html += '</div>';
+
+    html += '<div style="margin-bottom:12px;padding:10px;background:var(--info-bg);border-radius:var(--radius);border:1px solid var(--info-border);font-size:12px;color:var(--info)">';
+    html += '<i class="fas fa-info-circle"></i> Chọn NV thay ca cho ngày này. NV không có lịch sẽ được đánh dấu "Thay ca".';
+    html += '</div>';
+
+    // Search box
+    html += '<input type="text" id="addSubSearch" placeholder="Tìm tên hoặc mã NV..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;margin-bottom:10px">';
+
+    // List
+    html += '<div id="addSubList" style="max-height:300px;overflow-y:auto">';
+    if (available.length === 0) {
+        html += '<div class="empty-state"><i class="fas fa-users"></i><p>Không còn NV nào để thêm<br>沒有可選員工</p></div>';
+    } else {
+        available.forEach(function(e) {
+            html += '<div class="add-sub-item" data-empid="'+escHtml(e.empId)+'" data-name="'+escHtml((e.name||'')+' '+(e.nameCN||''))+'" style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border-light);cursor:pointer;transition:background .2s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'transparent\'">';
+            var deptCls = getDeptFromEmp(e) === 'bep' ? 'dept-bep' : 'dept-phucvu';
+            html += '<div class="card-avatar '+deptCls+'" style="width:32px;height:32px;font-size:11px">'+getInitials(e.name)+'</div>';
+            html += '<div style="flex:1;min-width:0">';
+            html += '<div style="font-size:13px;font-weight:700;color:var(--text-dark)">'+escHtml(e.name||'')+(e.nameCN?' <span style="color:var(--text-dim);font-weight:500">'+escHtml(e.nameCN)+'</span>':'')+'</div>';
+            html += '<div style="font-size:10px;color:var(--text-dim)">'+escHtml(e.empId)+'</div>';
+            html += '</div>';
+            html += '<i class="fas fa-plus" style="color:#7B1FA2"></i>';
+            html += '</div>';
+        });
+    }
+    html += '</div>';
+
+    // Link tới QuanLyNhanVien
+    html += '<div style="text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
+    html += '<a href="QuanLyNhanVien.html" target="_blank" class="link-qlnv"><i class="fas fa-external-link-alt"></i> Mở hệ thống Quản lý NV để thêm NV mới</a>';
+    html += '</div>';
+
+    $id('editSheet').innerHTML = html;
+    $id('editModal').classList.add('show');
+
+    $id('btnCloseAddSub').addEventListener('click', closeEditModal);
+    $id('editModal').addEventListener('click', function(e){
+        if (e.target === $id('editModal')) closeEditModal();
+    });
+
+    // Search filter
+    $id('addSubSearch').addEventListener('input', function(){
+        var q = this.value.toLowerCase().trim();
+        document.querySelectorAll('.add-sub-item').forEach(function(it){
+            var name = (it.dataset.name||'').toLowerCase();
+            var id = (it.dataset.empid||'').toLowerCase();
+            it.style.display = (name.indexOf(q)>=0 || id.indexOf(q)>=0) ? 'flex' : 'none';
+        });
+    });
+
+    // Click item → add as substitute
+    document.querySelectorAll('.add-sub-item').forEach(function(it){
+        it.addEventListener('click', function(){
+            var empId = this.dataset.empid;
+            closeEditModal();
+            addSubstitute(empId);
+        });
+    });
+}
+
+function addSubstitute(empId) {
+    var emp = findEmp(empId);
+    if (!emp) return;
+
+    // Lấy chấm công của NV này (nếu có)
+    var ccRecords = getChamCongForEmp(empId, currentDate);
+    var punchPairs = buildPunchPairs(ccRecords);
+
+    var segments = [];
+    if (punchPairs.length > 0) {
+        punchPairs.forEach(function(pp) {
+            segments.push({
+                confirmedStart: pp.start || '',
+                confirmedEnd: pp.end || '',
+                originalStart: pp.start || '',
+                originalEnd: pp.end || '',
+                schedStart: '',
+                schedEnd: ''
+            });
+        });
+    } else {
+        // Không có chấm công → cho phép nhập tay sau qua Sửa
+        segments.push({
+            confirmedStart: '',
+            confirmedEnd: '',
+            originalStart: '',
+            originalEnd: '',
+            schedStart: '',
+            schedEnd: ''
+        });
+    }
+
+    var data = {
+        empId: empId,
+        empName: emp.name,
+        empNameCN: emp.nameCN || '',
+        date: currentDate,
+        segments: segments,
+        status: 'substitute',
+        isSubstitute: true,
+        note: 'Thay ca 代班',
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: 'boss'
+    };
+
+    saveConfirmation(data);
+}
+
+// ========== QUICK CONFIRM (DRAFT - chua save backend) ==========
 function doQuickConfirm(empId) {
     var card = buildEmployeeCardData(findEmp(empId), currentDate);
     if (!card) return;
 
-    // Build confirmed segments using punch times (or schedule times as fallback)
+    // Toggle: neu da draft -> bo chon
+    if (draftConfirmations[empId]) {
+        delete draftConfirmations[empId];
+        renderCards();
+        toast('Đã bỏ chọn '+card.emp.name, 'info');
+        return;
+    }
+
+    // Build confirmed segments, BỎ QUA cac segment bi danh dau ignored (punch nham)
     var segments = [];
-    card.matchedSegments.forEach(function(seg) {
+    var skippedNoise = 0;
+    card.matchedSegments.forEach(function(seg, idx) {
+        if (isSegIgnored(empId, idx, seg)) {
+            skippedNoise++;
+            return; // Bo qua segment bi nham
+        }
         segments.push({
             confirmedStart: seg.punchStart || seg.schedStart || '',
             confirmedEnd: seg.punchEnd || seg.schedEnd || '',
@@ -1134,18 +1691,21 @@ function doQuickConfirm(empId) {
         });
     });
 
-    var data = {
+    var note = skippedNoise > 0 ? ('Đã bỏ '+skippedNoise+' lần punch nhầm') : '';
+
+    // Luu vao DRAFT (chua save backend), cho bulk button
+    draftConfirmations[empId] = {
         empId: empId,
         empName: card.emp.name,
         empNameCN: card.emp.nameCN || '',
         date: currentDate,
         segments: segments,
-        note: '',
+        note: note,
         confirmedAt: new Date().toISOString(),
         confirmedBy: 'boss'
     };
-
-    saveConfirmation(data);
+    renderCards();
+    toast('✓ Đã chọn '+card.emp.name+' (chưa lưu - bấm "Đồng ý xác nhận" để hoàn tất)', 'success');
 }
 
 function findEmp(empId) {
@@ -1171,15 +1731,28 @@ function openEditModal(empId) {
     html += '<button class="modal-close" id="btnCloseEdit">&times;</button>';
     html += '</div>';
 
+    // Loc segment bi danh dau bo qua (punch nham) - chi edit segment hop le
+    var validSegments = card.matchedSegments.filter(function(seg, idx){
+        return !isSegIgnored(empId, idx, seg);
+    });
+    if (validSegments.length === 0) validSegments = [{schedStart:'', schedEnd:'', punchStart:'', punchEnd:''}];
+
+    var ignoredCount = card.matchedSegments.length - validSegments.length;
+    if (ignoredCount > 0) {
+        html += '<div style="background:#FFF3E0;border:1px solid #FFCC80;border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:12px;color:#E65100">';
+        html += '<i class="fas fa-info-circle"></i> Đã bỏ '+ignoredCount+' lần punch nhầm (quay lại card chính để khôi phục)';
+        html += '</div>';
+    }
+
     // For each segment
-    var numSegs = Math.max(card.matchedSegments.length, 1);
+    var numSegs = Math.max(validSegments.length, 1);
 
     for (var si = 0; si < numSegs; si++) {
-        var seg = card.matchedSegments[si] || {schedStart:'', schedEnd:'', punchStart:'', punchEnd:''};
+        var seg = validSegments[si] || {schedStart:'', schedEnd:'', punchStart:'', punchEnd:''};
         var existSeg = (existing && existing.segments && existing.segments[si]) || null;
 
-        var confirmStart = existSeg ? (existSeg.confirmedStart || '') : (seg.punchStart || seg.schedStart || '');
-        var confirmEnd = existSeg ? (existSeg.confirmedEnd || '') : (seg.punchEnd || seg.schedEnd || '');
+        var confirmStart = normalizeHM(existSeg ? (existSeg.confirmedStart || '') : (seg.punchStart || seg.schedStart || ''));
+        var confirmEnd = normalizeHM(existSeg ? (existSeg.confirmedEnd || '') : (seg.punchEnd || seg.schedEnd || ''));
 
         if (numSegs > 1) {
             html += '<div class="split-edit-box">';
@@ -1391,6 +1964,12 @@ function doEditConfirm(empId, numSegs) {
     if (!emp) return;
 
     var card = buildEmployeeCardData(emp, currentDate);
+    // Filter ra cac segment hop le (giong logic openEditModal)
+    var validSegments = card.matchedSegments.filter(function(seg, idx){
+        return !isSegIgnored(empId, idx, seg);
+    });
+    if (validSegments.length === 0) validSegments = [{schedStart:'', schedEnd:'', punchStart:'', punchEnd:''}];
+
     var segments = [];
 
     for (var i = 0; i < numSegs; i++) {
@@ -1402,7 +1981,7 @@ function doEditConfirm(empId, numSegs) {
         var confirmedStart = (sh && sm) ? sh+':'+sm : '';
         var confirmedEnd = (eh && em2) ? eh+':'+em2 : '';
 
-        var origSeg = card.matchedSegments[i] || {};
+        var origSeg = validSegments[i] || {};
 
         segments.push({
             confirmedStart: confirmedStart,
@@ -1428,24 +2007,119 @@ function doEditConfirm(empId, numSegs) {
     };
 
     closeEditModal();
-    saveConfirmation(data);
+    // Luu vao DRAFT thay vi save backend ngay - cho bulk button commit
+    draftConfirmations[empId] = data;
+    renderCards();
+    toast('✓ Đã chỉnh sửa '+emp.name+' (chưa lưu - bấm "Đồng ý xác nhận" để hoàn tất)', 'success');
+}
+
+// ========== BACKEND ADAPTER ==========
+// Backend Apps Script doc field theo top-level (confirmedIn/Out, shiftIndex).
+// IMPORTANT: Backend IGNORE truong `status` (luon luu = "confirmed"). Workaround: encode
+// status vao prefix cua note field: "[STATUS:off]reason..." de persist qua API.
+function flattenForBackend(data) {
+    var records = [];
+    var segs = data.segments || [];
+    var statusTag = data.status || 'confirmed';
+    var rawNote = data.note || '';
+    // Encode status vao note (workaround backend strip status field)
+    var encodedNote = '[STATUS:'+statusTag+']' + rawNote;
+    var base = {
+        empId: data.empId,
+        empName: data.empName || '',
+        empNameCN: data.empNameCN || '',
+        date: data.date,
+        note: encodedNote,
+        status: statusTag, // van gui phong khi backend update
+        isSubstitute: data.isSubstitute || false,
+        confirmedBy: data.confirmedBy || 'boss',
+        confirmedAt: data.confirmedAt || new Date().toISOString()
+    };
+    if (segs.length === 0) {
+        var r = Object.assign({}, base, {
+            shiftIndex: 0,
+            confirmedIn: '', confirmedOut: '',
+            originalIn: '', originalOut: '',
+            schedStart: '', schedEnd: ''
+        });
+        records.push(r);
+    } else {
+        segs.forEach(function(s, idx) {
+            var r = Object.assign({}, base, {
+                shiftIndex: idx,
+                confirmedIn: s.confirmedStart || '',
+                confirmedOut: s.confirmedEnd || '',
+                originalIn: s.originalStart || '',
+                originalOut: s.originalEnd || '',
+                schedStart: s.schedStart || '',
+                schedEnd: s.schedEnd || ''
+            });
+            records.push(r);
+        });
+    }
+    return records;
+}
+
+// Parse time tu Date string (vd "Sat Dec 30 1899 09:00:00 GMT+0706" -> "09:00")
+function parseTimeFromDate(s) {
+    if (!s) return '';
+    s = String(s).trim();
+    var m = s.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+    if (m) return pad(parseInt(m[1],10)) + ':' + pad(parseInt(m[2],10));
+    m = s.match(/\b(\d{2}):(\d{2}):(\d{2})\b/);
+    if (m) return pad(parseInt(m[1],10)) + ':' + pad(parseInt(m[2],10));
+    return '';
+}
+
+// Parse date string -> YYYY-MM-DD
+function parseYMDFromDate(s) {
+    if (!s) return '';
+    s = String(s).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+        return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    }
+    return '';
+}
+
+// ========== SYNC STATUS ==========
+function updateSyncStatus(success) {
+    var el = $id('syncText');
+    if (!el) return;
+    var now = vnNow();
+    var hh = pad(now.getHours()), mm = pad(now.getMinutes());
+    if (success) {
+        el.innerHTML = '✓ Đã đồng bộ QLNV lúc '+hh+':'+mm;
+        el.style.color = '#90EE90';
+    } else {
+        el.innerHTML = '⚠ Offline - sẽ đồng bộ sau';
+        el.style.color = '#FFD54F';
+    }
 }
 
 // ========== SAVE CONFIRMATION ==========
 function saveConfirmation(data) {
     showLoading('Đang lưu xác nhận 正在保存...');
 
+    // Backend nhan array record da flatten (1 record / 1 segment)
+    var inputArr = Array.isArray(data) ? data : [data];
+    var payload = [];
+    inputArr.forEach(function(d){ payload = payload.concat(flattenForBackend(d)); });
+
     apiCall('confirmAttendance', {
         bossPassword: BOSS_PASSWORD,
-        data: JSON.stringify(data)
+        data: JSON.stringify(payload)
     }).then(function(res) {
         hideLoading();
         if (res.success) {
             // Update local state
             confirmedData[data.empId] = data;
             renderCards();
-            toast('Đã xác nhận '+data.empName+' 確認成功', 'success');
+            updateSyncStatus(true);
+            toast('✓ Đã lưu & đồng bộ QLNV: '+data.empName, 'success');
         } else {
+            updateSyncStatus(false);
             toast('Lỗi: '+(res.error||'Không rõ')+ ' 錯誤', 'error');
         }
     }).catch(function(e) {
@@ -1459,83 +2133,60 @@ function saveConfirmation(data) {
             localStorage.setItem('bc2_pending_confirms', JSON.stringify(local));
         } catch(ex){}
         renderCards();
+        updateSyncStatus(false);
         toast('Lưu offline, sẽ đồng bộ sau 離線保存', 'info');
     });
 }
 
-// ========== BULK CONFIRM ==========
+// ========== BULK CONFIRM (commit all drafts) ==========
 $id('btnBulkConfirm').addEventListener('click', function(){
     if (isLoading) return;
 
-    // Collect all unconfirmed employees
-    var toConfirm = [];
-    allEmployees.forEach(function(emp) {
-        if (getDeptFromEmp(emp) !== currentDept) return;
-        var sched = getScheduleForEmp(emp.empId, currentDate);
-        var ccRecords = getChamCongForEmp(emp.empId, currentDate);
-        if (!sched && ccRecords.length === 0) return;
-        if (confirmedData[emp.empId]) return; // already confirmed
-
-        var card = buildEmployeeCardData(emp, currentDate);
-        var segments = [];
-        card.matchedSegments.forEach(function(seg) {
-            segments.push({
-                confirmedStart: seg.punchStart || seg.schedStart || '',
-                confirmedEnd: seg.punchEnd || seg.schedEnd || '',
-                originalStart: seg.punchStart || '',
-                originalEnd: seg.punchEnd || '',
-                schedStart: seg.schedStart || '',
-                schedEnd: seg.schedEnd || ''
-            });
-        });
-
-        toConfirm.push({
-            empId: emp.empId,
-            empName: emp.name,
-            empNameCN: emp.nameCN || '',
-            date: currentDate,
-            segments: segments,
-            note: '',
-            confirmedAt: new Date().toISOString(),
-            confirmedBy: 'boss'
-        });
-    });
+    // Chi commit nhung NV trong DRAFT (Boss da explicitly click XN/Sua)
+    var toConfirm = Object.values(draftConfirmations);
 
     if (toConfirm.length === 0) {
-        toast('Không có nhân viên nào cần xác nhận 無需確認', 'info');
+        toast('⚠ Chưa chọn NV nào! Hãy bấm "XN" hoặc "Sửa" trên từng card trước.', 'info');
         return;
     }
 
     showLoading('Đang xác nhận '+toConfirm.length+' nhân viên...');
 
-    // Send bulk
+    // Send bulk - flatten tat ca segments
+    var bulkPayload = [];
+    toConfirm.forEach(function(d){ bulkPayload = bulkPayload.concat(flattenForBackend(d)); });
     apiCall('confirmAttendance', {
         bossPassword: BOSS_PASSWORD,
-        data: JSON.stringify(toConfirm)
+        data: JSON.stringify(bulkPayload)
     }).then(function(res) {
         hideLoading();
         if (res.success) {
-            // Update local state
+            // Move tu draft -> confirmedData (da commit)
             toConfirm.forEach(function(d) {
                 confirmedData[d.empId] = d;
+                delete draftConfirmations[d.empId];
             });
             renderCards();
+            updateSyncStatus(true);
             showSuccessOverlay(toConfirm.length, 0);
         } else {
+            updateSyncStatus(false);
             toast('Lỗi: '+(res.error||'Không rõ'), 'error');
         }
     }).catch(function(e) {
         hideLoading();
-        // Save locally
-        toConfirm.forEach(function(d) {
-            confirmedData[d.empId] = d;
-        });
+        // Save locally (giu draft + queue offline)
         try {
             var local = JSON.parse(localStorage.getItem('bc2_pending_confirms') || '[]');
             toConfirm.forEach(function(d){ local.push(d); });
             localStorage.setItem('bc2_pending_confirms', JSON.stringify(local));
         } catch(ex){}
+        toConfirm.forEach(function(d) {
+            confirmedData[d.empId] = d;
+            delete draftConfirmations[d.empId];
+        });
         renderCards();
+        updateSyncStatus(false);
         showSuccessOverlay(toConfirm.length, 0, true);
     });
 });
@@ -1545,8 +2196,11 @@ function showSuccessOverlay(confirmed, edited, isOffline) {
     $id('successDetail').innerHTML =
         '<strong>'+confirmed+'</strong> nhân viên đã được xác nhận 員工已確認' +
         (edited > 0 ? '<br><strong>'+edited+'</strong> đã chỉnh sửa 已修改' : '') +
-        (isOffline ? '<br><span style="color:var(--warning)">⚠ Lưu offline, cần đồng bộ 離線保存</span>' : '') +
-        '<br><span style="font-size:11px;color:var(--text-dim)">'+formatDateVN(currentDate)+'</span>';
+        (isOffline
+            ? '<br><span style="color:var(--warning)">⚠ Lưu offline, sẽ đồng bộ QLNV khi có mạng</span>'
+            : '<br><span style="color:var(--success);font-size:12px"><i class="fas fa-database"></i> Đã đồng bộ với hệ thống QLNV</span>') +
+        '<br><span style="font-size:11px;color:var(--text-dim)">'+formatDateVN(currentDate)+'</span>' +
+        '<br><a href="QuanLyNhanVien.html" target="_blank" style="font-size:11px;color:var(--info);text-decoration:underline"><i class="fas fa-external-link-alt"></i> Mở QLNV để kiểm tra dữ liệu</a>';
     $id('successOverlay').classList.add('show');
 }
 
@@ -1565,9 +2219,11 @@ function retryPendingConfirms() {
         var pending = JSON.parse(localStorage.getItem('bc2_pending_confirms') || '[]');
         if (pending.length === 0) return;
 
+        var flat = [];
+        pending.forEach(function(d){ flat = flat.concat(flattenForBackend(d)); });
         apiCall('confirmAttendance', {
             bossPassword: BOSS_PASSWORD,
-            data: JSON.stringify(pending)
+            data: JSON.stringify(flat)
         }).then(function(res) {
             if (res.success) {
                 localStorage.removeItem('bc2_pending_confirms');
