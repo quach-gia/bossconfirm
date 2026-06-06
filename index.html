@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <meta name="version" content="2026-06-06.1">
+    <meta name="version" content="2026-06-06.2">
     <title>BossConfirm - Quách Gia 郭家 Xác nhận chấm công</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
@@ -278,7 +278,7 @@ button{font-family:inherit}
         <div class="header-top">
             <div>
                 <div class="header-title"><i class="fas fa-clipboard-check"></i> BossConfirm</div>
-                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.06.1</span></div>
+                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.06.2</span></div>
             </div>
             <div class="header-actions">
                 <button class="header-btn" id="btnRefresh" title="Làm mới 刷新"><i class="fas fa-sync-alt"></i></button>
@@ -383,17 +383,35 @@ var isLoading = false;
 var jsonpCounter = 0;
 var NOISE_THRESHOLD_MIN = 2; // Punch < 2 phut bi coi la bam nham
 var noiseOverrides = {};     // {empId_segIdx: true=keep, false=ignore} - override quyet dinh tu dong
-var ROUND_TO_SCHED_MIN = 10; // Punch lech <= 10p so voi lich -> tu lam tron ve gio lich
+var ROUND_THRESHOLD_MIN = 5; // Nguong tha thu (phut) - boss yeu cau 5p
 
-// Lam tron gio punch ve gio lich neu lech <= ROUND_TO_SCHED_MIN phut
-function roundToSchedule(punchTime, schedTime) {
-    if (!punchTime || !schedTime) return punchTime || '';
+// Lam tron co chon loc theo quy tac cua Boss:
+// VAO ca:
+//   - Vao som (truoc lich): tinh = LICH (NV khong duoc tinh som tu phat)
+//   - Vao tre <= 5p: tinh = LICH (tha loi tre vat)
+//   - Vao tre > 5p: tinh = PUNCH (NV bi tinh dung tre that)
+// RA ca:
+//   - Ra som (truoc lich): tinh = PUNCH (giu nguyen de boss thay & xu ly - khong duoc phep)
+//   - Ra muon <= 5p: tinh = LICH (khong cong tang ca vat)
+//   - Ra muon > 5p: tinh = PUNCH (boss xac nhan, NV duoc cong tang ca that)
+function roundForBoss(punchTime, schedTime, isStart) {
+    if (!punchTime) return schedTime || '';
+    if (!schedTime) return normalizeHM(punchTime);
     var p = normalizeHM(punchTime);
     var s = normalizeHM(schedTime);
-    var diff = timeDiffMinutes(s, p);
+    var diff = timeDiffMinutes(s, p); // > 0 = punch sau sched, < 0 = punch truoc sched
     if (diff === null) return p;
-    if (Math.abs(diff) <= ROUND_TO_SCHED_MIN) return s; // Lam tron ve gio lich
-    return p;
+    if (isStart) {
+        // VAO ca
+        if (diff <= 0) return s;              // vao som hoac dung gio -> lich
+        if (diff <= ROUND_THRESHOLD_MIN) return s; // tre vat -> tha
+        return p;                              // tre that -> punch
+    } else {
+        // RA ca
+        if (diff < 0) return p;                // ra som -> giu punch (boss thay & xu ly)
+        if (diff <= ROUND_THRESHOLD_MIN) return s; // muon vat -> lich
+        return p;                              // muon that -> punch (boss xac nhan)
+    }
 }
 
 // ========== DOM REFS ==========
@@ -1655,16 +1673,16 @@ function doQuickConfirm(empId) {
             skippedNoise++;
             return;
         }
-        // Lam tron: neu punch lech <=10p so voi lich -> dung gio lich
+        // Lam tron theo quy tac Boss: vao tre 5p tha, ra som giu nguyen, ra muon 5p tha, >5p giu nguyen
         var cStart = seg.punchStart || seg.schedStart || '';
         var cEnd = seg.punchEnd || seg.schedEnd || '';
         if (seg.schedStart && seg.punchStart) {
-            var sRounded = roundToSchedule(seg.punchStart, seg.schedStart);
+            var sRounded = roundForBoss(seg.punchStart, seg.schedStart, true);
             if (sRounded !== normalizeHM(seg.punchStart)) rounded++;
             cStart = sRounded;
         }
         if (seg.schedEnd && seg.punchEnd) {
-            var eRounded = roundToSchedule(seg.punchEnd, seg.schedEnd);
+            var eRounded = roundForBoss(seg.punchEnd, seg.schedEnd, false);
             if (eRounded !== normalizeHM(seg.punchEnd)) rounded++;
             cEnd = eRounded;
         }
@@ -2197,37 +2215,4 @@ $id('btnSuccessClose').addEventListener('click', function(){
 });
 
 $id('btnSuccessEdit').addEventListener('click', function(){
-    $id('successOverlay').classList.remove('show');
-    // User wants to edit — they can click edit on individual cards
-});
-
-// ========== RETRY PENDING ==========
-function retryPendingConfirms() {
-    try {
-        var pending = JSON.parse(localStorage.getItem('bc2_pending_confirms') || '[]');
-        if (pending.length === 0) return;
-
-        var flat = [];
-        pending.forEach(function(d){ flat = flat.concat(flattenForBackend(d)); });
-        apiCall('confirmAttendance', {
-            bossPassword: BOSS_PASSWORD,
-            data: JSON.stringify(flat)
-        }).then(function(res) {
-            if (res.success) {
-                localStorage.removeItem('bc2_pending_confirms');
-                toast('Đã đồng bộ '+pending.length+' xác nhận offline 已同步', 'success');
-            }
-        }).catch(function(){});
-    } catch(e) {}
-}
-
-// ========== INIT ==========
-checkAuth();
-
-// Retry pending on load
-setTimeout(retryPendingConfirms, 5000);
-
-})();
-</script>
-</body>
-</html>
+    $id('successOverlay').classList
