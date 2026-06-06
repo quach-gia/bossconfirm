@@ -383,7 +383,18 @@ var isLoading = false;
 var jsonpCounter = 0;
 var NOISE_THRESHOLD_MIN = 2; // Punch < 2 phut bi coi la bam nham
 var noiseOverrides = {};     // {empId_segIdx: true=keep, false=ignore} - override quyet dinh tu dong
-var draftConfirmations = {}; // {empId: data} - Boss click XN/Sua nhung chua commit. Bulk = commit all.
+var ROUND_TO_SCHED_MIN = 10; // Punch lech <= 10p so voi lich -> tu lam tron ve gio lich
+
+// Lam tron gio punch ve gio lich neu lech <= ROUND_TO_SCHED_MIN phut
+function roundToSchedule(punchTime, schedTime) {
+    if (!punchTime || !schedTime) return punchTime || '';
+    var p = normalizeHM(punchTime);
+    var s = normalizeHM(schedTime);
+    var diff = timeDiffMinutes(s, p);
+    if (diff === null) return p;
+    if (Math.abs(diff) <= ROUND_TO_SCHED_MIN) return s; // Lam tron ve gio lich
+    return p;
+}
 
 // ========== DOM REFS ==========
 var $id = function(id){ return document.getElementById(id); };
@@ -606,33 +617,16 @@ function showMainApp() {
 $id('btnPrevDate').addEventListener('click', function(){ changeDate(-1); });
 $id('btnNextDate').addEventListener('click', function(){ changeDate(1); });
 $id('dateInput').addEventListener('change', function(){
-    var newDate = this.value;
-    if (!confirmLeavePage()) {
-        this.value = currentDate; // Revert
-        return;
-    }
-    currentDate = newDate;
+    currentDate = this.value;
     onDateChanged();
 });
 
 function changeDate(delta) {
-    if (!confirmLeavePage()) return;
     var d = new Date(currentDate);
     d.setDate(d.getDate() + delta);
     currentDate = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
     $id('dateInput').value = currentDate;
     onDateChanged();
-}
-
-// Canh bao neu boss co draft chua commit, hoi truoc khi mat
-function confirmLeavePage() {
-    var draftCount = Object.keys(draftConfirmations).length;
-    if (draftCount === 0) return true;
-    if (confirm('⚠ Có '+draftCount+' NV đã chọn nhưng chưa bấm "Đồng ý xác nhận".\nTiếp tục sẽ MẤT các lựa chọn này. Bỏ chọn?')) {
-        draftConfirmations = {};
-        return true;
-    }
-    return false;
 }
 
 function onDateChanged() {
@@ -998,12 +992,10 @@ function buildEmployeeCardData(emp, dateStr) {
         }
     });
 
-    // Determine status. DRAFT priority cao hon confirmed (vi boss vua edit moi)
+    // Determine status
     var status = 'pending'; // default
-    var draft = draftConfirmations[emp.empId] || null;
-    if (draft) {
-        status = 'drafted';
-    } else if (confirmed) {
+    var draft = null; // Bo draft mode - click XN save ngay
+    if (confirmed) {
         if (confirmed.status === 'off') status = 'off';
         else if (confirmed.status === 'substitute' || confirmed.isSubstitute) status = 'substitute';
         else status = 'confirmed';
@@ -1072,17 +1064,16 @@ function renderCards() {
         cards.push(buildEmployeeCardData(emp, currentDate));
     });
 
-    // Sort: drafted/pending dau, confirmed cuoi
-    var statusOrder = {drafted:0, missing:1, warning:2, split:3, pending:4, substitute:5, confirmed:6, off:7};
+    // Sort: pending/missing dau, confirmed cuoi
+    var statusOrder = {missing:0, warning:1, split:2, pending:3, substitute:4, confirmed:5, off:6};
     cards.sort(function(a, b) {
         return (statusOrder[a.status]||3) - (statusOrder[b.status]||3);
     });
 
     // Update stats
-    var countConfirmed = 0, countPending = 0, countMissing = 0, countDrafted = 0;
+    var countConfirmed = 0, countPending = 0, countMissing = 0;
     cards.forEach(function(c) {
-        if (c.status === 'drafted') countDrafted++;
-        else if (c.status === 'confirmed' || c.status === 'off' || c.status === 'substitute') countConfirmed++;
+        if (c.status === 'confirmed' || c.status === 'off' || c.status === 'substitute') countConfirmed++;
         else if (c.status === 'missing') countMissing++;
         else countPending++;
     });
@@ -1090,13 +1081,8 @@ function renderCards() {
     $id('statPending').textContent = countPending;
     $id('statMissing').textContent = countMissing;
 
-    // Bulk bar: chi hien khi co NV trong draft (Boss da click XN/Sua)
-    if (countDrafted > 0) {
-        $id('bulkBar').style.display = 'block';
-        $id('bulkBadge').textContent = countDrafted;
-    } else {
-        $id('bulkBar').style.display = 'none';
-    }
+    // Bo bulk button - workflow moi: XN ca nhan = save ngay
+    $id('bulkBar').style.display = 'none';
 
     if (cards.length === 0) {
         container.innerHTML = '<div class="empty-state"><i class="fas fa-calendar-times"></i><p>Không có nhân viên nào có lịch ngày này<br>今天沒有員工排班</p></div>';
@@ -1155,9 +1141,6 @@ function renderSingleCard(card) {
             break;
         case 'substitute':
             statusBadge = '<span class="card-status st-substitute"><i class="fas fa-user-plus"></i> Thay ca 代班</span>';
-            break;
-        case 'drafted':
-            statusBadge = '<span class="card-status st-drafted"><i class="fas fa-clock"></i> Đã chọn 已選</span>';
             break;
         default:
             statusBadge = '<span class="card-status st-pending"><i class="fas fa-hourglass-half"></i> Chờ 待確認</span>';
@@ -1363,12 +1346,7 @@ function renderSingleCard(card) {
 
     // Actions
     h += '<div class="card-actions">';
-    if (card.status === 'drafted') {
-        h += '<span style="font-size:11px;color:#FF6F00;font-weight:700"><i class="fas fa-clock"></i> Chờ bấm "Đồng ý xác nhận"</span>';
-        h += '<span class="card-spacer"></span>';
-        h += '<button class="btn-xn off" data-action="quick-confirm" data-empid="'+emp.empId+'" title="Bỏ chọn"><i class="fas fa-times"></i> Bỏ chọn</button>';
-        h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
-    } else if (card.status === 'confirmed' || card.status === 'substitute') {
+    if (card.status === 'confirmed' || card.status === 'substitute') {
         h += '<span style="font-size:11px;color:var(--success);font-weight:600"><i class="fas fa-check-circle"></i> Đã xác nhận 已確認</span>';
         h += '<span class="card-spacer"></span>';
         h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa xác nhận"><i class="fas fa-trash"></i></button>';
@@ -1378,7 +1356,7 @@ function renderSingleCard(card) {
         h += '<span class="card-spacer"></span>';
         h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
     } else {
-        h += '<button class="btn-xn confirm" data-action="quick-confirm" data-empid="'+emp.empId+'"><i class="fas fa-check"></i> Chọn XN</button>';
+        h += '<button class="btn-xn confirm" data-action="quick-confirm" data-empid="'+emp.empId+'"><i class="fas fa-check"></i> XN 確認</button>';
         h += '<button class="btn-xn off" data-action="off" data-empid="'+emp.empId+'"><i class="fas fa-user-slash"></i> OFF</button>';
         h += '<span class="card-spacer"></span>';
         h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
@@ -1663,30 +1641,36 @@ function addSubstitute(empId) {
     saveConfirmation(data);
 }
 
-// ========== QUICK CONFIRM (DRAFT - chua save backend) ==========
+// ========== QUICK CONFIRM (save backend NGAY) ==========
 function doQuickConfirm(empId) {
     var card = buildEmployeeCardData(findEmp(empId), currentDate);
     if (!card) return;
 
-    // Toggle: neu da draft -> bo chon
-    if (draftConfirmations[empId]) {
-        delete draftConfirmations[empId];
-        renderCards();
-        toast('Đã bỏ chọn '+card.emp.name, 'info');
-        return;
-    }
-
-    // Build confirmed segments, BỎ QUA cac segment bi danh dau ignored (punch nham)
+    // Build confirmed segments, BỎ QUA segment punch nham + LAM TRON gio ve lich neu lech nho
     var segments = [];
     var skippedNoise = 0;
+    var rounded = 0;
     card.matchedSegments.forEach(function(seg, idx) {
         if (isSegIgnored(empId, idx, seg)) {
             skippedNoise++;
-            return; // Bo qua segment bi nham
+            return;
+        }
+        // Lam tron: neu punch lech <=10p so voi lich -> dung gio lich
+        var cStart = seg.punchStart || seg.schedStart || '';
+        var cEnd = seg.punchEnd || seg.schedEnd || '';
+        if (seg.schedStart && seg.punchStart) {
+            var sRounded = roundToSchedule(seg.punchStart, seg.schedStart);
+            if (sRounded !== normalizeHM(seg.punchStart)) rounded++;
+            cStart = sRounded;
+        }
+        if (seg.schedEnd && seg.punchEnd) {
+            var eRounded = roundToSchedule(seg.punchEnd, seg.schedEnd);
+            if (eRounded !== normalizeHM(seg.punchEnd)) rounded++;
+            cEnd = eRounded;
         }
         segments.push({
-            confirmedStart: seg.punchStart || seg.schedStart || '',
-            confirmedEnd: seg.punchEnd || seg.schedEnd || '',
+            confirmedStart: cStart,
+            confirmedEnd: cEnd,
             originalStart: seg.punchStart || '',
             originalEnd: seg.punchEnd || '',
             schedStart: seg.schedStart || '',
@@ -1694,10 +1678,12 @@ function doQuickConfirm(empId) {
         });
     });
 
-    var note = skippedNoise > 0 ? ('Đã bỏ '+skippedNoise+' lần punch nhầm') : '';
+    var noteParts = [];
+    if (skippedNoise > 0) noteParts.push('Đã bỏ '+skippedNoise+' lần punch nhầm');
+    if (rounded > 0) noteParts.push('Tự làm tròn '+rounded+' giờ về lịch');
+    var note = noteParts.join('; ');
 
-    // Luu vao DRAFT (chua save backend), cho bulk button
-    draftConfirmations[empId] = {
+    var data = {
         empId: empId,
         empName: card.emp.name,
         empNameCN: card.emp.nameCN || '',
@@ -1707,8 +1693,9 @@ function doQuickConfirm(empId) {
         confirmedAt: new Date().toISOString(),
         confirmedBy: 'boss'
     };
-    renderCards();
-    toast('✓ Đã chọn '+card.emp.name+' (chưa lưu - bấm "Đồng ý xác nhận" để hoàn tất)', 'success');
+
+    // SAVE NGAY len backend (khong qua draft)
+    saveConfirmation(data);
 }
 
 function findEmp(empId) {
@@ -2010,10 +1997,8 @@ function doEditConfirm(empId, numSegs) {
     };
 
     closeEditModal();
-    // Luu vao DRAFT thay vi save backend ngay - cho bulk button commit
-    draftConfirmations[empId] = data;
-    renderCards();
-    toast('✓ Đã chỉnh sửa '+emp.name+' (chưa lưu - bấm "Đồng ý xác nhận" để hoàn tất)', 'success');
+    // Save NGAY len backend
+    saveConfirmation(data);
 }
 
 // ========== BACKEND ADAPTER ==========
