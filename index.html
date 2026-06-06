@@ -830,9 +830,12 @@ function loadConfirmedForDate(dateStr, callback) {
 // ========== MATCHING LOGIC ==========
 function getScheduleForEmp(empId, dateStr) {
     // dateStr is YYYY-MM-DD
+    // Skip entry trong (xoa boi boss qua publishSchedule)
     var result = null;
     allSchedules.forEach(function(s) {
         if (s.empId === empId && s.date === dateStr) {
+            // Entry empty = lich da xoa
+            if (!s.start && !s.end) return;
             result = s;
         }
     });
