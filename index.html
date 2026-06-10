@@ -278,7 +278,7 @@ button{font-family:inherit}
         <div class="header-top">
             <div>
                 <div class="header-title"><i class="fas fa-clipboard-check"></i> BossConfirm</div>
-                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.10.3</span></div>
+                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.10.4</span></div>
             </div>
             <div class="header-actions">
                 <button class="header-btn" id="btnRefresh" title="Làm mới 刷新"><i class="fas fa-sync-alt"></i></button>
@@ -704,6 +704,26 @@ function loadAllData() {
     apiCall('getEmployeeList').then(function(res) {
         if (res.success && res.employees) {
             allEmployees = res.employees;
+            // Enrich with endDate/active từ cloud data (QLNV employees array)
+            apiCall('loadData').then(function(cd){
+                if(cd.success && cd.data){
+                    try{
+                        var qlnvData = (typeof cd.data === 'string') ? JSON.parse(cd.data) : cd.data;
+                        var qlnvEmps = qlnvData.employees || [];
+                        var idMap = {};
+                        qlnvEmps.forEach(function(q){ idMap[q.id||q.empId] = q; });
+                        allEmployees.forEach(function(e){
+                            var match = idMap[e.empId];
+                            if(match){
+                                e.endDate = match.endDate || '';
+                                e.startDate = match.startDate || '';
+                                e.active = (match.active !== false);
+                            }
+                        });
+                        try { localStorage.setItem('bc2_emps', JSON.stringify(allEmployees)); } catch(ex){}
+                    }catch(ex){console.warn('Enrich endDate failed:',ex);}
+                }
+            }).catch(function(){});
             try { localStorage.setItem('bc2_emps', JSON.stringify(allEmployees)); } catch(e){}
         }
         checkDone();
@@ -1374,11 +1394,13 @@ function renderSingleCard(card) {
     } else if (card.status === 'missing') {
         h += '<button class="btn-xn off" data-action="off" data-empid="'+emp.empId+'"><i class="fas fa-user-slash"></i> OFF</button>';
         h += '<span class="card-spacer"></span>';
+        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa lịch ngày này"><i class="fas fa-trash"></i> Xóa 刪</button>';
         h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
     } else {
         h += '<button class="btn-xn confirm" data-action="quick-confirm" data-empid="'+emp.empId+'"><i class="fas fa-check"></i> XN 確認</button>';
         h += '<button class="btn-xn off" data-action="off" data-empid="'+emp.empId+'"><i class="fas fa-user-slash"></i> OFF</button>';
         h += '<span class="card-spacer"></span>';
+        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa lịch ngày này"><i class="fas fa-trash"></i> Xóa 刪</button>';
         h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
     }
     h += '</div>';
@@ -1542,6 +1564,23 @@ function openAddSubModal() {
     var available = allEmployees.filter(function(e) {
         if (getDeptFromEmp(e) !== currentDept) return false;
         if (shownIds[e.empId]) return false;
+        // Filter: chỉ NV đang làm (endDate rỗng hoặc trong tương lai)
+        if (e.endDate) {
+            var endParts = String(e.endDate).split(/[\/\-]/);
+            if (endParts.length === 3) {
+                var endDt;
+                if (endParts[2].length === 4) {
+                    // DD/MM/YYYY
+                    endDt = new Date(parseInt(endParts[2]), parseInt(endParts[1])-1, parseInt(endParts[0]));
+                } else {
+                    // YYYY-MM-DD
+                    endDt = new Date(parseInt(endParts[0]), parseInt(endParts[1])-1, parseInt(endParts[2]));
+                }
+                if (endDt < new Date()) return false; // Đã nghỉ việc
+            }
+        }
+        // Also check active flag if present
+        if (e.active === false) return false;
         return true;
     });
 
