@@ -267,7 +267,7 @@ button{font-family:inherit}
         <div class="login-sub">XÁC NHẬN CHẤM CÔNG<br>確認考勤系統</div>
         <div class="login-label"><i class="fas fa-lock"></i> Mật khẩu 密碼</div>
         <input type="password" id="passwordInput" class="login-input" placeholder="••••••••" autocomplete="off">
-        <button class="btn-login" id="btnLogin"><i class="fas fa-sign-in-alt"></i> Đăng nhập 登入</button>
+        <button class="btn-login" id="btnLogin" onclick="doLogin()" ontouchend="doLogin()"><i class="fas fa-sign-in-alt"></i> Đăng nhập 登入</button>
         <div id="loginError" class="login-error"><i class="fas fa-exclamation-circle"></i> Sai mật khẩu 密碼錯誤</div>
     </div>
 </div>
@@ -278,7 +278,7 @@ button{font-family:inherit}
         <div class="header-top">
             <div>
                 <div class="header-title"><i class="fas fa-clipboard-check"></i> BossConfirm</div>
-                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.06.2</span></div>
+                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.10.1</span></div>
             </div>
             <div class="header-actions">
                 <button class="header-btn" id="btnRefresh" title="Làm mới 刷新"><i class="fas fa-sync-alt"></i></button>
@@ -616,6 +616,8 @@ function doLogout() {
     $id('loginScreen').style.display = 'flex';
     $id('passwordInput').value = '';
 }
+window.doLogin = doLogin;
+window.doLogout = doLogout;
 
 $id('btnLogin').addEventListener('click', doLogin);
 $id('passwordInput').addEventListener('keydown', function(e){
@@ -2215,4 +2217,37 @@ $id('btnSuccessClose').addEventListener('click', function(){
 });
 
 $id('btnSuccessEdit').addEventListener('click', function(){
-    $id('successOverlay').classList
+    $id('successOverlay').classList.remove('show');
+    // User wants to edit — they can click edit on individual cards
+});
+
+// ========== RETRY PENDING ==========
+function retryPendingConfirms() {
+    try {
+        var pending = JSON.parse(localStorage.getItem('bc2_pending_confirms') || '[]');
+        if (pending.length === 0) return;
+
+        var flat = [];
+        pending.forEach(function(d){ flat = flat.concat(flattenForBackend(d)); });
+        apiCall('confirmAttendance', {
+            bossPassword: BOSS_PASSWORD,
+            data: JSON.stringify(flat)
+        }).then(function(res) {
+            if (res.success) {
+                localStorage.removeItem('bc2_pending_confirms');
+                toast('Đã đồng bộ '+pending.length+' xác nhận offline 已同步', 'success');
+            }
+        }).catch(function(){});
+    } catch(e) {}
+}
+
+// ========== INIT ==========
+checkAuth();
+
+// Retry pending on load
+setTimeout(retryPendingConfirms, 5000);
+
+})();
+</script>
+</body>
+</html>
