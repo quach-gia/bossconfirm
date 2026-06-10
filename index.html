@@ -278,7 +278,7 @@ button{font-family:inherit}
         <div class="header-top">
             <div>
                 <div class="header-title"><i class="fas fa-clipboard-check"></i> BossConfirm</div>
-                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.10.2</span></div>
+                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.10.3</span></div>
             </div>
             <div class="header-actions">
                 <button class="header-btn" id="btnRefresh" title="Làm mới 刷新"><i class="fas fa-sync-alt"></i></button>
@@ -1166,7 +1166,7 @@ function renderSingleCard(card) {
             statusBadge = '<span class="card-status st-pending"><i class="fas fa-hourglass-half"></i> Chờ 待確認</span>';
     }
 
-    var h = '<div class="emp-card '+statusClass+'" data-empid="'+emp.empId+'">';
+    var h = '<div class="emp-card '+statusClass+'" data-empid="'+emp.empId+'" onclick="if(event.target.closest(&quot;.btn-xn&quot;)||event.target.closest(&quot;.seg-toggle&quot;))return;openEditModal(\''+emp.empId+'\');">';
 
     // Header
     h += '<div class="card-header">';
@@ -1725,7 +1725,7 @@ function findEmp(empId) {
 }
 
 // ========== EDIT MODAL ==========
-function openEditModal(empId) {
+window.openEditModal = function(empId) {
     var emp = findEmp(empId);
     if (!emp) return;
 
