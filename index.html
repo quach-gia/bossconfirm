@@ -278,7 +278,7 @@ button{font-family:inherit}
         <div class="header-top">
             <div>
                 <div class="header-title"><i class="fas fa-clipboard-check"></i> BossConfirm</div>
-                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.10.4</span></div>
+                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.12.4</span></div>
             </div>
             <div class="header-actions">
                 <button class="header-btn" id="btnRefresh" title="Làm mới 刷新"><i class="fas fa-sync-alt"></i></button>
@@ -374,6 +374,11 @@ var CHAMCONG_SHEET_NAME = 'ChamCong';
 
 // ========== STATE ==========
 var allEmployees = [];
+var _extraSegsCount = 0; // Boss them them ca manually
+var subAddedDept = {}; // empId+'_'+date -> dept Boss thêm vào
+try { subAddedDept = JSON.parse(localStorage.getItem('bc2_subDept')) || {}; } catch(e){}
+var hiddenEntries = {}; // empId+'_'+date -> true (Boss bấm Xóa)
+try { hiddenEntries = JSON.parse(localStorage.getItem('bc2_hidden')) || {}; } catch(e){}
 var allSchedules = [];
 var chamCongData = [];
 var confirmedData = {};  // key: empId -> {segments, note, confirmedAt}
@@ -703,7 +708,13 @@ function loadAllData() {
     // 1) Employee list
     apiCall('getEmployeeList').then(function(res) {
         if (res.success && res.employees) {
-            allEmployees = res.employees;
+            // Dedup by empId (Sheet Accounts may have duplicates)
+            var _seen = {};
+            allEmployees = res.employees.filter(function(e){
+                if (!e.empId || _seen[e.empId]) return false;
+                _seen[e.empId] = true;
+                return true;
+            });
             // Enrich with endDate/active từ cloud data (QLNV employees array)
             apiCall('loadData').then(function(cd){
                 if(cd.success && cd.data){
@@ -1021,8 +1032,14 @@ function buildEmployeeCardData(emp, dateStr) {
         schedSegments = parseSplitTimes(sched.start, sched.end);
     }
 
-    var isSplit = schedSegments.length > 1 || punchPairs.length > 1;
+    var isSplit = schedSegments.length > 1 || punchPairs.length > 1 || (confirmed && confirmed.segments && confirmed.segments.length > 1);
     var matchedSegments = matchPunchToSchedule(punchPairs, schedSegments);
+    // Extend matchedSegments to cover confirmed segments (multi-ca Boss tự thêm)
+    if (confirmed && confirmed.segments && confirmed.segments.length > matchedSegments.length) {
+        for (var _ei = matchedSegments.length; _ei < confirmed.segments.length; _ei++) {
+            matchedSegments.push({schedStart:'', schedEnd:'', punchStart:'', punchEnd:''});
+        }
+    }
 
     // Danh dau cac segment co the la punch nham
     matchedSegments.forEach(function(seg) {
@@ -1089,13 +1106,19 @@ function getConfirmedForEmp(empId) {
 }
 
 function renderCards() {
+    _extraSegsCount = 0; // Reset Boss added segs when re-render
     var container = $id('cardsContainer');
     if (!currentDate) return;
 
     // Get employees for current department
     var cards = [];
     allEmployees.forEach(function(emp) {
-        if (getDeptFromEmp(emp) !== currentDept) return;
+        // Filter: Boss đã ẩn entry này
+        if (hiddenEntries[emp.empId+'_'+currentDate]) return;
+        // Cross-dept: include if Boss added as substitute to current dept
+        var inCurrentDept = getDeptFromEmp(emp) === currentDept;
+        var isSubAdded = subAddedDept[emp.empId+'_'+currentDate] === currentDept;
+        if (!inCurrentDept && !isSubAdded) return;
         var sched = getScheduleForEmp(emp.empId, currentDate);
         var ccRecords = getChamCongForEmp(emp.empId, currentDate);
         // Hiện NV có lịch, có chấm công, hoặc đã được boss xác nhận/thêm thay ca/OFF
@@ -1223,7 +1246,7 @@ function renderSingleCard(card) {
         h += '<div class="card-actions">';
         h += '<span style="font-size:11px;color:#757575;font-weight:600"><i class="fas fa-user-slash"></i> Nghỉ 休假</span>';
         h += '<span class="card-spacer"></span>';
-        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa OFF"><i class="fas fa-trash"></i></button>';
+        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa OFF" onclick="event.stopPropagation();window.askDeleteConfirmation(\''+emp.empId+'\');return false;"><i class="fas fa-trash"></i></button>';
         h += '<button class="btn-xn edit-link" data-action="unoff" data-empid="'+emp.empId+'"><i class="fas fa-undo"></i> Hủy OFF 取消</button>';
         h += '</div>';
         h += '</div>'; // close emp-card
@@ -1389,18 +1412,18 @@ function renderSingleCard(card) {
     if (card.status === 'confirmed' || card.status === 'substitute') {
         h += '<span style="font-size:11px;color:var(--success);font-weight:600"><i class="fas fa-check-circle"></i> Đã xác nhận 已確認</span>';
         h += '<span class="card-spacer"></span>';
-        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa xác nhận"><i class="fas fa-trash"></i></button>';
+        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa xác nhận" onclick="event.stopPropagation();window.askDeleteConfirmation(\''+emp.empId+'\');return false;"><i class="fas fa-trash"></i></button>';
         h += '<button class="btn-xn edit-link" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Chỉnh sửa 修改</button>';
     } else if (card.status === 'missing') {
         h += '<button class="btn-xn off" data-action="off" data-empid="'+emp.empId+'"><i class="fas fa-user-slash"></i> OFF</button>';
         h += '<span class="card-spacer"></span>';
-        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa lịch ngày này"><i class="fas fa-trash"></i> Xóa 刪</button>';
+        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa lịch ngày này" onclick="event.stopPropagation();window.askDeleteConfirmation(\''+emp.empId+'\');return false;"><i class="fas fa-trash"></i> Xóa 刪</button>';
         h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
     } else {
         h += '<button class="btn-xn confirm" data-action="quick-confirm" data-empid="'+emp.empId+'"><i class="fas fa-check"></i> XN 確認</button>';
         h += '<button class="btn-xn off" data-action="off" data-empid="'+emp.empId+'"><i class="fas fa-user-slash"></i> OFF</button>';
         h += '<span class="card-spacer"></span>';
-        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa lịch ngày này"><i class="fas fa-trash"></i> Xóa 刪</button>';
+        h += '<button class="btn-xn delete" data-action="delete" data-empid="'+emp.empId+'" title="Xóa lịch ngày này" onclick="event.stopPropagation();window.askDeleteConfirmation(\''+emp.empId+'\');return false;"><i class="fas fa-trash"></i> Xóa 刪</button>';
         h += '<button class="btn-xn edit" data-action="edit" data-empid="'+emp.empId+'"><i class="fas fa-edit"></i> Sửa 修改</button>';
     }
     h += '</div>';
@@ -1464,7 +1487,7 @@ function showConfirmDialog(title, msg, onOk) {
     cancel.onclick = cleanup;
 }
 
-function askDeleteConfirmation(empId) {
+window.askDeleteConfirmation = function(empId) {
     var emp = findEmp(empId);
     if (!emp) return;
     var name = (emp.name||'') + (emp.nameCN ? ' '+emp.nameCN : '');
@@ -1498,12 +1521,16 @@ function doDeleteConfirmation(empId) {
     }).then(function(res) {
         hideLoading();
         delete confirmedData[empId];
+        hiddenEntries[empId+'_'+currentDate] = true;
+        try { localStorage.setItem('bc2_hidden', JSON.stringify(hiddenEntries)); } catch(ex){}
         renderCards();
         updateSyncStatus(true);
-        toast('Đã xóa xác nhận '+emp.name, 'success');
+        toast('Đã xóa '+emp.name, 'success');
     }).catch(function(e) {
         hideLoading();
         delete confirmedData[empId];
+        hiddenEntries[empId+'_'+currentDate] = true;
+        try { localStorage.setItem('bc2_hidden', JSON.stringify(hiddenEntries)); } catch(ex){}
         renderCards();
         updateSyncStatus(false);
         toast('Đã xóa local, đồng bộ sau', 'info');
@@ -1562,7 +1589,7 @@ function openAddSubModal() {
     document.querySelectorAll('.emp-card[data-empid]').forEach(function(c){ shownIds[c.dataset.empid] = true; });
 
     var available = allEmployees.filter(function(e) {
-        if (getDeptFromEmp(e) !== currentDept) return false;
+        // Cho phep cross-dept: hien tat ca NV (kê cả khác bộ phận)
         if (shownIds[e.empId]) return false;
         // Filter: chỉ NV đang làm (endDate rỗng hoặc trong tương lai)
         if (e.endDate) {
@@ -1610,7 +1637,10 @@ function openAddSubModal() {
             var deptCls = getDeptFromEmp(e) === 'bep' ? 'dept-bep' : 'dept-phucvu';
             html += '<div class="card-avatar '+deptCls+'" style="width:32px;height:32px;font-size:11px">'+getInitials(e.name)+'</div>';
             html += '<div style="flex:1;min-width:0">';
-            html += '<div style="font-size:13px;font-weight:700;color:var(--text-dark)">'+escHtml(e.name||'')+(e.nameCN?' <span style="color:var(--text-dim);font-weight:500">'+escHtml(e.nameCN)+'</span>':'')+'</div>';
+            var _empDept = getDeptFromEmp(e);
+            var _isCross = (_empDept !== currentDept);
+            var _deptBadge = _isCross ? ' <span style="font-size:9px;background:#fff3e0;color:#e65100;padding:1px 4px;border-radius:3px">⇄ '+(_empDept==='bep'?'Bếp':'Phục vụ')+'</span>' : '';
+            html += '<div style="font-size:13px;font-weight:700;color:var(--text-dark)">'+escHtml(e.name||'')+(e.nameCN?' <span style="color:var(--text-dim);font-weight:500">'+escHtml(e.nameCN)+'</span>':'')+_deptBadge+'</div>';
             html += '<div style="font-size:10px;color:var(--text-dim)">'+escHtml(e.empId)+'</div>';
             html += '</div>';
             html += '<i class="fas fa-plus" style="color:#7B1FA2"></i>';
@@ -1655,6 +1685,14 @@ function openAddSubModal() {
 function addSubstitute(empId) {
     var emp = findEmp(empId);
     if (!emp) return;
+    // Mark dept assignment for cross-dept tracking
+    subAddedDept[empId+'_'+currentDate] = currentDept;
+    try { localStorage.setItem('bc2_subDept', JSON.stringify(subAddedDept)); } catch(ex){}
+    // Clear hidden flag if exists
+    if (hiddenEntries[empId+'_'+currentDate]) {
+        delete hiddenEntries[empId+'_'+currentDate];
+        try { localStorage.setItem('bc2_hidden', JSON.stringify(hiddenEntries)); } catch(ex){}
+    }
 
     // Lấy chấm công của NV này (nếu có)
     var ccRecords = getChamCongForEmp(empId, currentDate);
@@ -1796,6 +1834,8 @@ window.openEditModal = function(empId) {
     // For each segment
     var numSegs = Math.max(validSegments.length, 1);
 
+    // Boss added extra segments
+    numSegs = numSegs + _extraSegsCount;
     for (var si = 0; si < numSegs; si++) {
         var seg = validSegments[si] || {schedStart:'', schedEnd:'', punchStart:'', punchEnd:''};
         var existSeg = (existing && existing.segments && existing.segments[si]) || null;
@@ -1805,7 +1845,7 @@ window.openEditModal = function(empId) {
 
         if (numSegs > 1) {
             html += '<div class="split-edit-box">';
-            html += '<div class="split-edit-header"><span class="split-badge">'+(si+1)+'</span> Ca '+(si+1)+' 班次'+(si+1)+'</div>';
+            html += '<div class="split-edit-header" style="display:flex;align-items:center"><span class="split-badge">'+(si+1)+'</span><span style="margin-left:6px">Ca '+(si+1)+' 班次'+(si+1)+'</span><button type="button" onclick="window._askDelSegment(\''+empId+'\','+si+');" title="Xóa ca này" style="margin-left:auto;background:transparent;color:#999;border:1px solid #ddd;border-radius:50%;width:26px;height:26px;cursor:pointer;font-weight:bold;font-size:14px;display:flex;align-items:center;justify-content:center;padding:0">×</button></div>';
         }
 
         // Scheduled
@@ -1876,9 +1916,17 @@ window.openEditModal = function(empId) {
 
         html += '</div>';
 
+
+
         if (numSegs > 1) {
             html += '</div>';
         }
+    }
+
+    // + Thêm ca button (cho ca gãy)
+    html += '<button type="button" onclick="window._addExtraSegment(\''+empId+'\');" style="width:100%;padding:10px;margin-top:8px;margin-bottom:12px;background:#f3e5f5;color:#7B1FA2;border:2px dashed #7B1FA2;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer"><i class="fas fa-plus"></i> Thêm ca làm (cho ca gãy) 加班次</button>';
+    if (_extraSegsCount > 0) {
+        html += '<button type="button" onclick="window._removeExtraSegment(\''+empId+'\');" style="width:100%;padding:6px;margin-bottom:12px;background:#fff;color:#c62828;border:1px solid #c62828;border-radius:4px;font-size:11px;cursor:pointer"><i class="fas fa-minus"></i> Bỏ ca cuối 移除最後班次</button>';
     }
 
     // Note
@@ -1923,6 +1971,78 @@ window.openEditModal = function(empId) {
         })(j);
     }
 }
+
+
+
+// Confirm popup before delete
+window._askDelSegment = function(empId, segIdx){
+    showConfirmDialog(
+        'Xóa Ca '+(segIdx+1)+'?',
+        'Bạn có chắc chắn muốn xóa <b>Ca '+(segIdx+1)+'</b>?<br><br><span style="color:var(--danger);font-size:11px">⚠ Toàn bộ ca sau sẽ được lưu ngay lên backend</span>',
+        function(){ window._delSegment(empId, segIdx); }
+    );
+};
+// Actually delete + auto-save backend
+window._delSegment = function(empId, segIdx){
+    var card = buildEmployeeCardData(findEmp(empId), currentDate);
+    var allSegs = card.matchedSegments;
+    var validSegs = allSegs.filter(function(s,i){return !isSegIgnored(empId, i, s);});
+    if (validSegs.length === 0) validSegs = [{}];
+    if (segIdx >= validSegs.length) {
+        if (_extraSegsCount > 0) _extraSegsCount--;
+    } else {
+        var validToAll = [];
+        allSegs.forEach(function(s,i){if(!isSegIgnored(empId,i,s))validToAll.push(i);});
+        var origIdx = validToAll[segIdx];
+        if (origIdx != null) {
+            noiseOverrides[empId + '_' + origIdx] = true;
+        }
+    }
+    // Collect REMAINING segments from current modal inputs (other ca, không phải ca bị xóa)
+    var btnConfirm = document.getElementById('btnModalConfirm');
+    var currentNumSegs = btnConfirm ? parseInt(btnConfirm.dataset.segments) : 1;
+    var remainSegs = [];
+    for (var i = 0; i < currentNumSegs; i++) {
+        if (i === segIdx) continue; // skip the one being deleted
+        var sh = (document.getElementById('editStartH_'+i)||{}).value || '';
+        var sm = (document.getElementById('editStartM_'+i)||{}).value || '';
+        var eh = (document.getElementById('editEndH_'+i)||{}).value || '';
+        var em = (document.getElementById('editEndM_'+i)||{}).value || '';
+        var cs = (sh && sm) ? sh+':'+sm : '';
+        var ce = (eh && em) ? eh+':'+em : '';
+        remainSegs.push({
+            confirmedStart: cs,
+            confirmedEnd: ce,
+            originalStart: (allSegs[i]||{}).punchStart || '',
+            originalEnd: (allSegs[i]||{}).punchEnd || '',
+            schedStart: (allSegs[i]||{}).schedStart || '',
+            schedEnd: (allSegs[i]||{}).schedEnd || ''
+        });
+    }
+    var emp = findEmp(empId);
+    var existingNote = (confirmedData[empId] && confirmedData[empId].note) || '';
+    var hasNonEmpty = remainSegs.some(function(s){return s.confirmedStart || s.confirmedEnd;});
+    if (hasNonEmpty) {
+        // Save remaining segments to backend
+        var data = {
+            empId: empId, empName: emp.name, empNameCN: emp.nameCN||'',
+            date: currentDate,
+            segments: remainSegs,
+            note: existingNote,
+            confirmedAt: new Date().toISOString(),
+            confirmedBy: 'boss'
+        };
+        closeEditModal();
+        saveConfirmation(data);
+    } else {
+        // No segments left → call delete confirmation (status=deleted)
+        closeEditModal();
+        doDeleteConfirmation(empId);
+    }
+};
+
+window._addExtraSegment = function(empId){ _extraSegsCount++; window.openEditModal(empId); };
+window._removeExtraSegment = function(empId){ if(_extraSegsCount>0)_extraSegsCount--; window.openEditModal(empId); };
 
 function buildHourSelect(id, selected) {
     var h = '<select class="time-select" id="'+id+'">';
