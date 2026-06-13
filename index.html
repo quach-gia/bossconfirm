@@ -278,7 +278,7 @@ button{font-family:inherit}
         <div class="header-top">
             <div>
                 <div class="header-title"><i class="fas fa-clipboard-check"></i> BossConfirm</div>
-                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.12.4</span></div>
+                <div class="sync-info" id="syncInfo"><i class="fas fa-database"></i> <span id="syncText">Sẵn sàng</span> · <a href="QuanLyNhanVien.html" target="_blank">Mở QLNV ↗</a> · <span style="font-size:9px;opacity:.6">v2026.06.12.8</span></div>
             </div>
             <div class="header-actions">
                 <button class="header-btn" id="btnRefresh" title="Làm mới 刷新"><i class="fas fa-sync-alt"></i></button>
@@ -377,6 +377,9 @@ var allEmployees = [];
 var _extraSegsCount = 0; // Boss them them ca manually
 var subAddedDept = {}; // empId+'_'+date -> dept Boss thêm vào
 try { subAddedDept = JSON.parse(localStorage.getItem('bc2_subDept')) || {}; } catch(e){}
+var _pendingSubs = {}; // empId+'_'+date -> true (Boss thêm thay ca, chưa XN giờ)
+window._pendingSubs = _pendingSubs;
+try { window._pendingSubs = JSON.parse(localStorage.getItem('bc2_pendingSubs')) || {}; } catch(e){}
 var hiddenEntries = {}; // empId+'_'+date -> true (Boss bấm Xóa)
 try { hiddenEntries = JSON.parse(localStorage.getItem('bc2_hidden')) || {}; } catch(e){}
 var allSchedules = [];
@@ -399,6 +402,17 @@ var ROUND_THRESHOLD_MIN = 5; // Nguong tha thu (phut) - boss yeu cau 5p
 //   - Ra som (truoc lich): tinh = PUNCH (giu nguyen de boss thay & xu ly - khong duoc phep)
 //   - Ra muon <= 5p: tinh = LICH (khong cong tang ca vat)
 //   - Ra muon > 5p: tinh = PUNCH (boss xac nhan, NV duoc cong tang ca that)
+
+function roundToNearest5(hm){
+    if (!hm) return '';
+    var m = String(hm).match(/(\d{1,2}):(\d{1,2})/);
+    if (!m) return hm;
+    var h = parseInt(m[1]), mm = parseInt(m[2]);
+    var rounded = Math.round(mm/5)*5;
+    if (rounded === 60) { rounded = 0; h = (h+1) % 24; }
+    return pad(h) + ':' + pad(rounded);
+}
+
 function roundForBoss(punchTime, schedTime, isStart) {
     if (!punchTime) return schedTime || '';
     if (!schedTime) return normalizeHM(punchTime);
@@ -1052,6 +1066,8 @@ function buildEmployeeCardData(emp, dateStr) {
     // Determine status
     var status = 'pending'; // default
     var draft = null; // Bo draft mode - click XN save ngay
+    // Check if pending substitute (Boss thêm nhưng chưa XN giờ)
+    var isPendingSub = window._pendingSubs && window._pendingSubs[emp.empId+'_'+dateStr];
     if (confirmed) {
         if (confirmed.status === 'off') status = 'off';
         else if (confirmed.status === 'substitute' || confirmed.isSubstitute) status = 'substitute';
@@ -1115,15 +1131,20 @@ function renderCards() {
     allEmployees.forEach(function(emp) {
         // Filter: Boss đã ẩn entry này
         if (hiddenEntries[emp.empId+'_'+currentDate]) return;
-        // Cross-dept: include if Boss added as substitute to current dept
-        var inCurrentDept = getDeptFromEmp(emp) === currentDept;
-        var isSubAdded = subAddedDept[emp.empId+'_'+currentDate] === currentDept;
-        if (!inCurrentDept && !isSubAdded) return;
+        var addedToDept = subAddedDept[emp.empId+'_'+currentDate];
+        if (addedToDept) {
+            // Boss đã chỉ định dept cụ thể cho NV này → CHỈ hiện ở dept đó
+            if (addedToDept !== currentDept) return;
+        } else {
+            // Default: hiện ở dept gốc của NV
+            if (getDeptFromEmp(emp) !== currentDept) return;
+        }
         var sched = getScheduleForEmp(emp.empId, currentDate);
         var ccRecords = getChamCongForEmp(emp.empId, currentDate);
         // Hiện NV có lịch, có chấm công, hoặc đã được boss xác nhận/thêm thay ca/OFF
         var hasConfirmed = !!confirmedData[emp.empId];
-        if (!sched && ccRecords.length === 0 && !hasConfirmed) return;
+        var isPendingSub = window._pendingSubs && window._pendingSubs[emp.empId+'_'+currentDate];
+        if (!sched && ccRecords.length === 0 && !hasConfirmed && !isPendingSub) return;
         cards.push(buildEmployeeCardData(emp, currentDate));
     });
 
@@ -1374,6 +1395,31 @@ function renderSingleCard(card) {
             h += '<span class="time-value" style="color:var(--danger)">--:-- (thiếu 缺卡)</span>';
         }
         h += '</div>';
+
+        // 2.5) Gợi ý làm tròn (chưa XN, có chấm công)
+        if (!card.confirmed && !card.draft && (seg.punchStart || seg.punchEnd)) {
+            var rawIn = normalizeHM(seg.punchStart||'');
+            var rawOut = normalizeHM(seg.punchEnd||'');
+            var rIn, rOut;
+            if (seg.schedStart && seg.punchStart) {
+                rIn = roundForBoss(seg.punchStart, seg.schedStart, true);
+            } else {
+                // Không có lịch: làm tròn về nearest 5-min mark
+                rIn = roundToNearest5(rawIn);
+            }
+            if (seg.schedEnd && seg.punchEnd) {
+                rOut = roundForBoss(seg.punchEnd, seg.schedEnd, false);
+            } else {
+                rOut = roundToNearest5(rawOut);
+            }
+            if (rIn !== rawIn || rOut !== rawOut) {
+                h += '<div class="time-row" style="background:#fff3e0;padding:3px 6px;border-radius:4px;border:1px dashed #ff9800">';
+                h += '<span class="time-label">💡</span>';
+                h += '<span style="font-size:11px;color:#e65100;margin-right:4px;font-weight:700">Gợi ý làm tròn:</span>';
+                h += '<span style="font-size:11px;color:#e65100;font-weight:700">'+(rIn||'--:--')+' - '+(rOut||'--:--')+'</span>';
+                h += '</div>';
+            }
+        }
 
         // 3) Boss (Confirmed hoac Draft) — uu tien draft neu co
         var bossSource = card.draft || card.confirmed;
@@ -1693,49 +1739,13 @@ function addSubstitute(empId) {
         delete hiddenEntries[empId+'_'+currentDate];
         try { localStorage.setItem('bc2_hidden', JSON.stringify(hiddenEntries)); } catch(ex){}
     }
-
-    // Lấy chấm công của NV này (nếu có)
-    var ccRecords = getChamCongForEmp(empId, currentDate);
-    var punchPairs = buildPunchPairs(ccRecords);
-
-    var segments = [];
-    if (punchPairs.length > 0) {
-        punchPairs.forEach(function(pp) {
-            segments.push({
-                confirmedStart: pp.start || '',
-                confirmedEnd: pp.end || '',
-                originalStart: pp.start || '',
-                originalEnd: pp.end || '',
-                schedStart: '',
-                schedEnd: ''
-            });
-        });
-    } else {
-        // Không có chấm công → cho phép nhập tay sau qua Sửa
-        segments.push({
-            confirmedStart: '',
-            confirmedEnd: '',
-            originalStart: '',
-            originalEnd: '',
-            schedStart: '',
-            schedEnd: ''
-        });
-    }
-
-    var data = {
-        empId: empId,
-        empName: emp.name,
-        empNameCN: emp.nameCN || '',
-        date: currentDate,
-        segments: segments,
-        status: 'substitute',
-        isSubstitute: true,
-        note: 'Thay ca 代班',
-        confirmedAt: new Date().toISOString(),
-        confirmedBy: 'boss'
-    };
-
-    saveConfirmation(data);
+    // Track as pending substitute (chưa XN, chưa nhập giờ)
+    if (!window._pendingSubs) window._pendingSubs = {};
+    window._pendingSubs[empId+'_'+currentDate] = true;
+    try { localStorage.setItem('bc2_pendingSubs', JSON.stringify(window._pendingSubs)); } catch(ex){}
+    // KHÔNG lưu backend ngay → chờ Boss bấm XN/Sửa
+    renderCards();
+    toast('✓ Đã thêm '+emp.name+' (Thay ca - chờ Boss XN)', 'info');
 }
 
 // ========== QUICK CONFIRM (save backend NGAY) ==========
@@ -1888,25 +1898,45 @@ window.openEditModal = function(empId) {
         html += '<div class="edit-section confirm-edit">';
         html += '<div class="edit-section-label"><i class="fas fa-edit"></i> Giờ xác nhận 確認時間</div>';
 
+        // Compute rounding suggestions for this segment
+        var sugIn = '', sugOut = '';
+        var _rawIn = normalizeHM(seg.punchStart||'');
+        var _rawOut = normalizeHM(seg.punchEnd||'');
+        if (seg.punchStart) {
+            sugIn = seg.schedStart ? roundForBoss(seg.punchStart, seg.schedStart, true) : roundToNearest5(_rawIn);
+            if (sugIn === _rawIn) sugIn = ''; // không có gì khác
+        }
+        if (seg.punchEnd) {
+            sugOut = seg.schedEnd ? roundForBoss(seg.punchEnd, seg.schedEnd, false) : roundToNearest5(_rawOut);
+            if (sugOut === _rawOut) sugOut = '';
+        }
         // Start time selectors
         var startH = '', startM = '';
         if (confirmStart) { var sp = confirmStart.split(':'); startH = sp[0]||''; startM = sp[1]||''; }
-        html += '<div class="edit-time-row"><label>Vào 入:</label>';
+        html += '<div class="edit-time-row" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px"><label>Vào 入:</label>';
         html += '<div class="time-select-group">';
         html += buildHourSelect('editStartH_'+si, startH);
         html += '<span class="time-colon">:</span>';
         html += buildMinuteSelect('editStartM_'+si, startM);
-        html += '</div></div>';
+        html += '</div>';
+        if (sugIn) {
+            html += '<button type="button" onclick="window._applySug(\''+si+'\',\'start\',\''+sugIn+'\')" style="background:#fff3e0;color:#e65100;border:1px dashed #ff9800;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer">💡 '+sugIn+'</button>';
+        }
+        html += '</div>';
 
         // End time selectors
         var endH = '', endM = '';
         if (confirmEnd) { var ep = confirmEnd.split(':'); endH = ep[0]||''; endM = ep[1]||''; }
-        html += '<div class="edit-time-row"><label>Ra 出:</label>';
+        html += '<div class="edit-time-row" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px"><label>Ra 出:</label>';
         html += '<div class="time-select-group">';
         html += buildHourSelect('editEndH_'+si, endH);
         html += '<span class="time-colon">:</span>';
         html += buildMinuteSelect('editEndM_'+si, endM);
-        html += '</div></div>';
+        html += '</div>';
+        if (sugOut) {
+            html += '<button type="button" onclick="window._applySug(\''+si+'\',\'end\',\''+sugOut+'\')" style="background:#fff3e0;color:#e65100;border:1px dashed #ff9800;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer">💡 '+sugOut+'</button>';
+        }
+        html += '</div>';
 
         // Quick input
         html += '<div class="quick-input-row">';
@@ -2282,6 +2312,11 @@ function saveConfirmation(data) {
         if (res.success) {
             // Update local state
             confirmedData[data.empId] = data;
+            // Clear pending sub flag (đã XN xong rồi)
+            if (window._pendingSubs && window._pendingSubs[data.empId+'_'+data.date]) {
+                delete window._pendingSubs[data.empId+'_'+data.date];
+                try { localStorage.setItem('bc2_pendingSubs', JSON.stringify(window._pendingSubs)); } catch(ex){}
+            }
             renderCards();
             updateSyncStatus(true);
             toast('✓ Đã lưu & đồng bộ QLNV: '+data.empName, 'success');
